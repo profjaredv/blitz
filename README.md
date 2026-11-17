@@ -1,10 +1,16 @@
 # Tug-of-War Blitz
 
-The host sets up a series of matchups (Pizza vs Tacos, Cats vs Dogs, …). In
-each round everyone taps for whichever side they want and the rope shows the
-room deciding in real time. The host
-screen (put it on the projector) shows the join code, QR code, live score and
-the winner. Quiz Blitz is the second mode: fastest right answer scores most.
+The host screen (put it on the projector) shows the join code, QR code, live
+score and winner. Players join on their phones with just a nickname.
+
+- **Tug of War** – a series of matchups (Pizza vs Tacos, Cats vs Dogs, …). In
+  each round everyone taps for whichever side they want and the rope shows the
+  room deciding in real time.
+- **Tournament of Stuff** – paste 4, 8, 12, 16 or 32 entries and Blitz builds a
+  double-elimination bracket. Every match is a tap battle and the winner
+  advances automatically. The host can click any ready match in the bracket to
+  play it next. A tie leaves the match open to redo.
+- **Quiz Blitz** – fastest right answer scores most.
 
 One small Node server serves the app and runs every game in memory over
 WebSockets. There is no database and nothing is billed per tap.
