@@ -5,9 +5,9 @@ export const TAP_SEND_MS = 150;
 /** Taps accepted per second on a phone (two thumbs manage about 14). */
 export const MAX_TAPS_PER_SECOND = 20;
 
-export const hasNextMatchup = (g: Game) => g.mIndex + 1 < g.matchups.length;
+export const hasNextMatchup = (g: Game) => !!g.upNext;
 
-export type GameType = 'tug-of-war' | 'quiz';
+export type GameType = 'tug-of-war' | 'quiz' | 'tournament';
 export type GameStatus = 'waiting' | 'active' | 'finished';
 export type Team = 'A' | 'B';
 
@@ -34,7 +34,34 @@ export interface Matchup {
 export interface MatchResult extends Matchup {
   scoreA: number;
   scoreB: number;
+  stage: string;
 }
+
+export interface Entrant {
+  id: string;
+  name: string;
+}
+
+export interface BracketMatch {
+  id: string;
+  p1: Entrant | null;
+  p2: Entrant | null;
+  winnerId: string | null;
+  round: number;
+  bracket: 'winners' | 'losers' | 'grand-final';
+  matchIndex: number;
+  isBye?: boolean;
+}
+
+export interface Bracket {
+  participants: Entrant[];
+  matches: BracketMatch[];
+  isReset: boolean;
+  championId: string | null;
+}
+
+export const BRACKET_SIZES = [4, 8, 12, 16, 32];
+export const isPlayable = (m: BracketMatch) => !!(m.p1 && m.p2 && !m.winnerId && !m.isBye);
 
 export interface LeaderRow {
   name: string;
@@ -57,8 +84,17 @@ export interface Game {
   labelB: string;
   matchups: Matchup[];
   mIndex: number;
-  /** Final score of every matchup played so far. */
+  /** Final score of every round played so far. */
   results: MatchResult[];
+  /** "Matchup 2 of 5", "Losers round 3", "Grand final"… */
+  stage: string;
+  /** The matchup being played (tournament: with its bracket match id). */
+  current: (Matchup & { matchId?: string }) | null;
+  /** What the host's Next button plays, if anything. */
+  upNext: Matchup | null;
+  /** Tournament mode only. */
+  bracket: Bracket | null;
+  champion: string | null;
   duration: number;
   scoreA: number;
   scoreB: number;
@@ -96,6 +132,7 @@ export interface Me {
 
 export type CreateOptions =
   | { type: 'tug-of-war'; matchups: Matchup[]; duration: number }
+  | { type: 'tournament'; items: string[]; byes: string[]; duration: number }
   | { type: 'quiz'; questions: Question[] };
 
 export type TugPhase = 'lobby' | 'countdown' | 'live' | 'tally' | 'done';

@@ -4,15 +4,15 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowRight, Plus, RefreshCw, Trash2, Trophy, Zap } from 'lucide-react';
+import { ArrowRight, Dices, Plus, RefreshCw, Swords, Trash2, Trophy, Zap } from 'lucide-react';
 import { conn } from './lib/conn';
-import type { CreateOptions, Game, Matchup, Me, Question } from './lib/game';
+import { BRACKET_SIZES, type CreateOptions, type Game, type Matchup, type Me, type Question } from './lib/game';
 import { cn } from './lib/utils';
 import { Button, Input } from './components/ui';
 import { HostView } from './views/Host';
 import { PlayerView } from './views/Player';
 
-type View = 'home' | 'create-tug' | 'create-quiz';
+type View = 'home' | 'create-tug' | 'create-quiz' | 'create-tournament';
 type Session = { code: string; role: 'host' | 'player'; hostKey?: string };
 
 const SESSION_KEY = 'blitz_session';
@@ -180,6 +180,9 @@ export default function App() {
         {view === 'home' && <Home busy={busy} onJoin={joinByCode} onCreate={setView} />}
         {view === 'create-tug' && <CreateTug busy={busy} onCancel={() => setView('home')} onCreate={create} />}
         {view === 'create-quiz' && <CreateQuiz busy={busy} onCancel={() => setView('home')} onCreate={create} />}
+        {view === 'create-tournament' && (
+          <CreateTournament busy={busy} onCancel={() => setView('home')} onCreate={create} />
+        )}
       </main>
     </div>
   );
@@ -240,6 +243,15 @@ function Home({
             <Zap className="w-7 h-7" />
             <span className="font-black text-lg">Tug of War</span>
             <span className="text-xs font-medium opacity-70">A series of this-vs-that rounds</span>
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => onCreate('create-tournament')}
+            className="py-6 flex-col rounded-[2rem] sm:col-span-2"
+          >
+            <Swords className="w-7 h-7" />
+            <span className="font-black text-lg">Tournament of Stuff</span>
+            <span className="text-xs font-medium opacity-70">Double-elimination bracket, every match a tap battle</span>
           </Button>
           <Button variant="outline" onClick={() => onCreate('create-quiz')} className="py-6 flex-col rounded-[2rem]">
             <Trophy className="w-7 h-7" />
@@ -376,6 +388,132 @@ function CreateTug({
 function parseLine(line: string): Matchup {
   const parts = line.split(/\s+vs\.?\s+|\s+v\s+|\t|,/i);
   return { a: parts[0] ?? '', b: parts.slice(1).join(' ') };
+}
+
+const RANDOM_STUFF = [
+  'Espresso', 'Pizza', 'Sneakers', 'Mountain Bike', 'Sunglasses', 'Laptop', 'Earbuds', 'Game Console',
+  'Vintage Camera', 'Electric Guitar', 'Telescope', 'Vinyl Record', 'Hiking Boots', 'Surfboard',
+  'Mechanical Keyboard', 'Drones', 'Electric Car', 'Bonsai Tree', 'Smart Watch', 'Designer Chair',
+  'Artisan Bread', 'Craft Beer', 'Action Figure', 'Fountain Pen',
+];
+
+function CreateTournament({
+  busy,
+  onCancel,
+  onCreate,
+}: {
+  busy: boolean;
+  onCancel: () => void;
+  onCreate: (opts: CreateOptions) => void;
+}) {
+  const [text, setText] = useState(
+    'Apple Inc\nCars\nClothes\nFood\nFriendship\nMusic\nNintendo\nShoes\nSocial Media\nTechnology\nThe Wheel\nTrees',
+  );
+  const [byes, setByes] = useState<string[]>([]);
+  const [duration, setDuration] = useState(10);
+
+  const items = [...new Set(text.split(/[\n,]+/).map((l) => l.trim()).filter(Boolean))];
+  const sizeOk = BRACKET_SIZES.includes(items.length);
+  const twelve = items.length === 12;
+  // With 12 entries, 4 skip round one. Default to the first four listed.
+  const chosen = byes.filter((b) => items.includes(b));
+  const byeList = chosen.length === 4 ? chosen : [...chosen, ...items.filter((i) => !chosen.includes(i))].slice(0, 4);
+
+  const toggleBye = (name: string) =>
+    setByes(byeList.includes(name) ? byeList.filter((b) => b !== name) : [...byeList.slice(-3), name]);
+
+  const randomize = () => {
+    const shuffled = [...RANDOM_STUFF].sort(() => Math.random() - 0.5);
+    setText(shuffled.slice(0, 16).join('\n'));
+  };
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!sizeOk || busy) return;
+    onCreate({ type: 'tournament', items, byes: twelve ? byeList : [], duration });
+  };
+
+  return (
+    <form onSubmit={submit} className="flex-1 flex flex-col gap-6">
+      <div>
+        <h2 className="text-3xl font-black">Tournament of Stuff</h2>
+        <p className="text-gray-500 font-medium">
+          List the contenders. Every match is a live tap battle; lose twice and you're out.
+        </p>
+      </div>
+
+      <label className="flex flex-col gap-1.5">
+        <span className="flex justify-between items-baseline text-sm font-bold text-gray-500">
+          <span>One per line</span>
+          <span className={cn('font-black', sizeOk ? 'text-green-600' : 'text-amber-600')}>
+            {items.length} entries {sizeOk ? '✓' : `· needs ${BRACKET_SIZES.join(', ')}`}
+          </span>
+        </span>
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          rows={10}
+          className="px-4 py-3 bg-white border-2 border-gray-200 rounded-2xl focus:border-indigo-500 focus:outline-none text-lg font-medium"
+        />
+      </label>
+      <Button variant="ghost" onClick={randomize} className="self-start px-3 py-2 text-sm">
+        <Dices className="w-4 h-4" /> Fill with 16 random things
+      </Button>
+
+      {twelve && (
+        <div className="space-y-2">
+          <span className="text-sm font-bold text-gray-500">
+            Pick 4 that skip the first round ({byeList.length}/4)
+          </span>
+          <div className="flex flex-wrap gap-2">
+            {items.map((name) => (
+              <button
+                key={name}
+                type="button"
+                onClick={() => toggleBye(name)}
+                aria-pressed={byeList.includes(name)}
+                className={cn(
+                  'px-3 py-1.5 rounded-full text-sm font-bold border-2',
+                  byeList.includes(name) ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-gray-200 text-gray-600',
+                )}
+              >
+                {name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-2">
+        <span className="text-sm font-bold text-gray-500 uppercase tracking-wider ml-1">Seconds per match</span>
+        <div className="grid grid-cols-4 gap-3">
+          {[10, 15, 20, 30].map((d) => (
+            <button
+              key={d}
+              type="button"
+              onClick={() => setDuration(d)}
+              className={cn(
+                'py-4 rounded-2xl font-bold border-2 transition-colors',
+                duration === d
+                  ? 'bg-indigo-600 border-indigo-600 text-white'
+                  : 'bg-white border-gray-200 text-gray-600 hover:border-indigo-300',
+              )}
+            >
+              {d}s
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="flex gap-3 pt-2">
+        <Button variant="ghost" onClick={onCancel} className="flex-1">
+          Cancel
+        </Button>
+        <Button type="submit" disabled={!sizeOk || busy} className="flex-[2]">
+          {busy ? 'Creating…' : 'Create tournament'}
+        </Button>
+      </div>
+    </form>
+  );
 }
 
 const BLANK: Question = { text: '', options: ['', '', '', ''], correctIndex: 0, timeLimit: 20 };

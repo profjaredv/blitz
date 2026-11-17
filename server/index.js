@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFile } from 'node:fs/promises';
 import { WebSocketServer } from 'ws';
+import { createBracket, decide, isPlayable, matchLabel, nextMatch } from './bracket.js';
 
 const PORT = Number(process.env.PORT || 8787);
 const DIST = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist');
@@ -41,12 +42,17 @@ function createRoom(opts) {
   const room = {
     code,
     hostKey: crypto.randomBytes(16).toString('hex'),
-    type: opts?.type === 'quiz' ? 'quiz' : 'tug-of-war',
+    type: ['quiz', 'tournament'].includes(opts?.type) ? opts.type : 'tug-of-war',
     status: 'waiting',
     round: 0,
     startTime: null,
     matchups: [],
     mIndex: 0,
+    /** The two sides being tapped for right now: { a, b, matchId? }. */
+    current: null,
+    bracket: null,
+    names: [],
+    byes: [],
     results: [],
     duration: [10, 15, 20, 30, 60].includes(opts?.duration) ? opts.duration : 15,
     finalA: 0,
@@ -71,6 +77,14 @@ function createRoom(opts) {
       .map((m) => ({ a: clean(m?.a, 30), b: clean(m?.b, 30) }))
       .filter((m) => m.a && m.b);
     if (!room.matchups.length) return null;
+    room.current = room.matchups[0];
+  }
+  if (room.type === 'tournament') {
+    room.names = [...new Set((Array.isArray(opts?.items) ? opts.items : []).map((x) => clean(x, 30)).filter(Boolean))];
+    room.byes = (Array.isArray(opts?.byes) ? opts.byes : []).map((x) => clean(x, 30));
+    room.bracket = createBracket(room.names, room.byes);
+    if (!room.bracket) return null;
+    setTournamentCurrent(room);
   }
   if (room.type === 'quiz') {
     room.questions = (Array.isArray(opts.questions) ? opts.questions : []).slice(0, 50).map((q) => ({
@@ -83,6 +97,31 @@ function createRoom(opts) {
   }
   rooms.set(code, room);
   return room;
+}
+
+/** Point `current` at the bracket's next match (null once there is a champion). */
+function setTournamentCurrent(room, matchId) {
+  const m = matchId ? room.bracket.matches.find((x) => x.id === matchId && isPlayable(x)) : nextMatch(room.bracket);
+  room.current = m ? { a: m.p1.name, b: m.p2.name, matchId: m.id } : null;
+  return !!m;
+}
+
+function stageOf(room) {
+  if (room.type === 'tournament') {
+    const m = room.current && room.bracket.matches.find((x) => x.id === room.current.matchId);
+    return m ? matchLabel(room.bracket, m) : 'Tournament';
+  }
+  return `Matchup ${room.mIndex + 1} of ${room.matchups.length}`;
+}
+
+/** What the host's "next" button will play. */
+function upNext(room) {
+  if (room.type === 'tournament') {
+    if (room.status !== 'finished') return null;
+    const m = nextMatch(room.bracket);
+    return m ? { a: m.p1.name, b: m.p2.name } : null;
+  }
+  return room.matchups[room.mIndex + 1] ?? null;
 }
 
 function tugScores(room) {
@@ -101,8 +140,9 @@ function publicState(room, forHost) {
   for (const p of room.players.values()) {
     if (p.answers[room.qIndex]) answered++;
   }
-  const m = room.matchups[room.mIndex];
+  const m = room.current;
   const [scoreA, scoreB] = tugScores(room);
+  const champ = room.bracket?.championId && room.bracket.participants.find((p) => p.id === room.bracket.championId);
   return {
     code: room.code,
     type: room.type,
@@ -115,6 +155,11 @@ function publicState(room, forHost) {
     matchups: room.matchups,
     mIndex: room.mIndex,
     results: room.results,
+    current: room.current,
+    stage: stageOf(room),
+    upNext: upNext(room),
+    bracket: room.bracket,
+    champion: champ ? champ.name : null,
     duration: room.duration,
     scoreA,
     scoreB,
@@ -176,8 +221,18 @@ function finishTug(room) {
   if (room.status !== 'active') return;
   [room.finalA, room.finalB] = tugScores(room);
   room.status = 'finished';
-  const m = room.matchups[room.mIndex];
-  room.results[room.mIndex] = { a: m.a, b: m.b, scoreA: room.finalA, scoreB: room.finalB };
+  const m = room.current;
+  const result = { a: m.a, b: m.b, scoreA: room.finalA, scoreB: room.finalB, stage: stageOf(room) };
+  if (room.type === 'tournament') {
+    room.results.push(result);
+    // A tie leaves the match open; the host redoes it.
+    const match = room.bracket.matches.find((x) => x.id === m.matchId);
+    if (match && room.finalA !== room.finalB) {
+      room.bracket = decide(room.bracket, match.id, room.finalA > room.finalB ? match.p1.id : match.p2.id);
+    }
+  } else {
+    room.results[room.mIndex] = result;
+  }
   room.topTappers = [...room.players.values()]
     .map((p) => ({ name: p.name, taps: p.a + p.b }))
     .filter((p) => p.taps > 0)
@@ -188,7 +243,7 @@ function finishTug(room) {
 }
 
 function tap(room, p, side, n) {
-  if (room.type !== 'tug-of-war' || room.status !== 'active') return;
+  if (room.type === 'quiz' || room.status !== 'active') return;
   const now = Date.now();
   const open = room.startTime + COUNTDOWN_MS;
   if (now < open || now > open + room.duration * 1000 + TAP_GRACE_MS) return;
@@ -283,6 +338,12 @@ function rematch(room) {
   room.results = [];
   room.finalA = 0;
   room.finalB = 0;
+  if (room.type === 'tournament') {
+    room.bracket = createBracket(room.names, room.byes);
+    setTournamentCurrent(room);
+  } else {
+    room.current = room.matchups[0] ?? null;
+  }
   room.topTappers = [];
   room.qIndex = 0;
   room.qStart = null;
@@ -341,14 +402,26 @@ function handle(ws, msg) {
   if (msg.t === 'leave') return detach(ws);
 
   if (ws.role === 'host') {
+    const between = room.status === 'waiting' || room.status === 'finished';
     if (msg.t === 'start' && room.status === 'waiting' && room.players.size > 0) {
-      room.type === 'quiz' ? startQuiz(room) : startTug(room);
+      if (room.type === 'quiz') startQuiz(room);
+      else if (room.current) startTug(room);
     } else if (msg.t === 'reveal') return reveal(room);
     else if (msg.t === 'next' && room.type === 'quiz') nextQuestion(room);
-    else if (msg.t === 'next' && room.status === 'finished' && room.mIndex + 1 < room.matchups.length) {
+    else if (msg.t === 'next' && room.type === 'tug-of-war' && room.status === 'finished' && room.mIndex + 1 < room.matchups.length) {
       room.mIndex++;
+      room.current = room.matchups[room.mIndex];
       startTug(room);
-    } else if (msg.t === 'replay' && room.type === 'tug-of-war' && room.status === 'finished') startTug(room);
+    } else if (msg.t === 'next' && room.type === 'tournament' && between && room.players.size > 0) {
+      // Plays the requested match, or the bracket's next one.
+      if (setTournamentCurrent(room, typeof msg.matchId === 'string' ? msg.matchId : null)) startTug(room);
+    } else if (msg.t === 'replay' && room.type !== 'quiz' && room.status === 'finished') {
+      // Redo the last round. In a tournament only an undecided (tied) match can be redone.
+      const open =
+        room.type !== 'tournament' ||
+        room.bracket.matches.some((x) => x.id === room.current?.matchId && isPlayable(x));
+      if (open) startTug(room);
+    }
     else if (msg.t === 'rematch' && room.status === 'finished') rematch(room);
     else return;
     return sendState(room);

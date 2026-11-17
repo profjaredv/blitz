@@ -152,7 +152,7 @@ function TugPlayer({ game, me, onLeave }: { game: Game; me: Me; onLeave: () => v
   const phase = tugPhase(game, now);
   const { tap, mine, unsent } = useTaps(game, me);
   const { open, end } = tugTimes(game);
-  const matchNo = `Matchup ${game.mIndex + 1} of ${game.matchups.length}`;
+  const matchNo = game.stage;
 
   const press = (side: Team) => (e: React.PointerEvent<HTMLButtonElement>) => {
     if (!tap(side)) return;
@@ -213,10 +213,14 @@ function TugPlayer({ game, me, onLeave }: { game: Game; me: Me; onLeave: () => v
         <p className="font-bold text-white/80">
           You tapped {me.a} for {game.labelA} and {me.b} for {game.labelB}.
         </p>
-        {more ? (
+        {game.champion ? (
+          <p className="text-2xl font-black text-yellow-300">🏆 {game.champion} is the champion!</p>
+        ) : more ? (
           <p className="text-sm font-bold text-white/60">
-            Next up: {game.matchups[game.mIndex + 1].a} vs {game.matchups[game.mIndex + 1].b}
+            Next up: {game.upNext!.a} vs {game.upNext!.b}
           </p>
+        ) : game.type === 'tournament' ? (
+          <p className="text-sm font-bold text-white/60">Waiting for the host…</p>
         ) : (
           <Results game={game} />
         )}

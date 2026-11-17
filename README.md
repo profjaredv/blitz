@@ -41,5 +41,6 @@ the server credited, and the final score. Add a third argument such as
 ## Where things are
 
 - `server/index.js` – game rules, timing, scoring, anti-cheat tap limit
+- `server/bracket.js` – double-elimination bracket (from Tournament of Stuff)
 - `src/lib/conn.ts` – the phone/host connection, with automatic reconnect
 - `src/views/Host.tsx`, `src/views/Player.tsx` – the two screens

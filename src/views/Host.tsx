@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { ArrowRight, Check, Copy, Play, RefreshCw, Trophy, Users, X } from 'lucide-react';
+import { ArrowRight, Check, Copy, Crown, Play, RefreshCw, Trophy, Users, X } from 'lucide-react';
 import { conn } from '../lib/conn';
 import { hasNextMatchup, joinUrl, ropePosition, tugPhase, tugTimes, type Game } from '../lib/game';
 import { cn } from '../lib/utils';
 import { Button, QUIZ_COLORS, QUIZ_SHAPES, Rope, TEAM, useNow, useWakeLock } from '../components/ui';
 import { Leaderboard, Results } from './Player';
+import { BracketView } from '../components/Bracket';
 
 /** The scoreboard for the room: put this screen on the projector. */
 export function HostView({ game, onLeave }: { game: Game; onLeave: () => void }) {
@@ -68,25 +69,33 @@ function TugHost({ game }: { game: Game }) {
   const next = () => conn.send({ t: 'next' });
   const replay = () => conn.send({ t: 'replay' });
   const restart = () => conn.send({ t: 'rematch' });
-  const matchNo = `Matchup ${game.mIndex + 1} of ${game.matchups.length}`;
+  const matchNo = game.stage;
+  const tournament = game.type === 'tournament';
+  const play = (matchId: string) => conn.send({ t: 'next', matchId });
 
   if (phase === 'lobby') {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-8 p-6 sm:p-10">
         <JoinPanel game={game} />
-        <div className="w-full max-w-3xl rounded-3xl bg-white/5 p-5 space-y-2">
-          <p className="text-xs font-black uppercase tracking-[0.3em] text-white/50">
-            {game.matchups.length} matchup{game.matchups.length === 1 ? '' : 's'} · {game.duration}s each
-          </p>
-          <ol className="flex flex-wrap gap-2">
-            {game.matchups.map((m, i) => (
-              <li key={i} className="px-3 py-1.5 rounded-full bg-white/10 text-sm font-bold">
-                <span className="opacity-50 mr-1">{i + 1}.</span>
-                {m.a} <span className="opacity-50">vs</span> {m.b}
-              </li>
-            ))}
-          </ol>
-        </div>
+        {tournament && game.bracket ? (
+          <div className="w-full max-w-6xl rounded-3xl bg-white/5 p-5">
+            <BracketView bracket={game.bracket} currentId={game.current?.matchId} />
+          </div>
+        ) : (
+          <div className="w-full max-w-3xl rounded-3xl bg-white/5 p-5 space-y-2">
+            <p className="text-xs font-black uppercase tracking-[0.3em] text-white/50">
+              {game.matchups.length} matchup{game.matchups.length === 1 ? '' : 's'} · {game.duration}s each
+            </p>
+            <ol className="flex flex-wrap gap-2">
+              {game.matchups.map((m, i) => (
+                <li key={i} className="px-3 py-1.5 rounded-full bg-white/10 text-sm font-bold">
+                  <span className="opacity-50 mr-1">{i + 1}.</span>
+                  {m.a} <span className="opacity-50">vs</span> {m.b}
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
         <div className="flex flex-col items-center gap-3">
           <div className="flex items-center gap-2 text-2xl font-black">
             <Users className="w-6 h-6" /> {players.length} joined
@@ -101,7 +110,7 @@ function TugHost({ game }: { game: Game }) {
         </div>
         <Button onClick={start} disabled={players.length === 0} className="px-12 py-5 text-2xl">
           <Play className="w-7 h-7 fill-current" />
-          Start matchup 1
+          {tournament ? `Start: ${game.labelA} vs ${game.labelB}` : 'Start matchup 1'}
         </Button>
         {players.length === 0 && (
           <p className="text-white/50 font-bold -mt-4">Waiting for the first player to join…</p>
@@ -175,7 +184,12 @@ function TugHost({ game }: { game: Game }) {
 
       {done && (
         <div className="flex flex-col items-center gap-5">
-          {!hasNextMatchup(game) && game.results.length > 1 && <Results game={game} large />}
+          {game.champion && (
+            <div className="flex items-center gap-3 px-8 py-4 rounded-3xl bg-yellow-400 text-slate-900 font-black text-3xl sm:text-4xl">
+              <Crown className="w-9 h-9" /> {game.champion} is the champion!
+            </div>
+          )}
+          {!tournament && !hasNextMatchup(game) && game.results.length > 1 && <Results game={game} large />}
           {game.topTappers.length > 0 && (
             <div className="flex flex-wrap justify-center gap-2">
               <span className="px-2 py-2 text-sm font-bold text-white/50">Fastest thumbs</span>
@@ -188,20 +202,27 @@ function TugHost({ game }: { game: Game }) {
             </div>
           )}
           <div className="flex flex-wrap justify-center gap-3">
-            {hasNextMatchup(game) ? (
+            {game.upNext ? (
               <Button onClick={next} className="px-10 py-4 text-xl">
-                Next: {game.matchups[game.mIndex + 1].a} vs {game.matchups[game.mIndex + 1].b}
+                Next: {game.upNext.a} vs {game.upNext.b}
                 <ArrowRight className="w-6 h-6" />
               </Button>
             ) : (
               <Button onClick={restart} className="px-10 py-4 text-xl">
-                <RefreshCw className="w-6 h-6" /> Play the series again
+                <RefreshCw className="w-6 h-6" /> {tournament ? 'New tournament, same entries' : 'Play the series again'}
               </Button>
             )}
-            <Button onClick={replay} variant="dark" className="px-6 py-4">
-              <RefreshCw className="w-5 h-5" /> Redo this matchup
-            </Button>
+            {(!tournament || scoreA === scoreB) && (
+              <Button onClick={replay} variant={scoreA === scoreB ? 'primary' : 'dark'} className="px-6 py-4">
+                <RefreshCw className="w-5 h-5" /> {scoreA === scoreB ? 'Tie! Redo this matchup' : 'Redo this matchup'}
+              </Button>
+            )}
           </div>
+          {tournament && game.bracket && (
+            <div className="w-full max-w-6xl rounded-3xl bg-white/5 p-5 mt-4">
+              <BracketView bracket={game.bracket} onPlay={game.champion ? undefined : play} />
+            </div>
+          )}
         </div>
       )}
     </div>
