@@ -1,6 +1,8 @@
 # Tug-of-War Blitz
 
-A room picks sides on their phones and taps to pull a shared rope. The host
+The host sets up a series of matchups (Pizza vs Tacos, Cats vs Dogs, …). In
+each round everyone taps for whichever side they want and the rope shows the
+room deciding in real time. The host
 screen (put it on the projector) shows the join code, QR code, live score and
 the winner. Quiz Blitz is the second mode: fastest right answer scores most.
 
@@ -28,7 +30,7 @@ open http://localhost:3000.
 
 ## Load test
 
-Host a tug-of-war game in a browser, then:
+Host a tug-of-war game in a browser (any matchups), then:
 
     node scripts/loadtest.mjs <join code> 200
 

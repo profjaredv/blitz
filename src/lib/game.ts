@@ -5,6 +5,8 @@ export const TAP_SEND_MS = 150;
 /** Taps accepted per second on a phone (two thumbs manage about 14). */
 export const MAX_TAPS_PER_SECOND = 20;
 
+export const hasNextMatchup = (g: Game) => g.mIndex + 1 < g.matchups.length;
+
 export type GameType = 'tug-of-war' | 'quiz';
 export type GameStatus = 'waiting' | 'active' | 'finished';
 export type Team = 'A' | 'B';
@@ -21,8 +23,17 @@ export interface Question extends PublicQuestion {
 
 export interface TopTapper {
   name: string;
-  team: Team;
   taps: number;
+}
+
+export interface Matchup {
+  a: string;
+  b: string;
+}
+
+export interface MatchResult extends Matchup {
+  scoreA: number;
+  scoreB: number;
 }
 
 export interface LeaderRow {
@@ -40,14 +51,17 @@ export interface Game {
   startTime: number | null;
   playerCount: number;
 
-  // tug-of-war
+  // tug-of-war: a series of matchups, one round each
+  /** Sides of the current matchup. */
   labelA: string;
   labelB: string;
+  matchups: Matchup[];
+  mIndex: number;
+  /** Final score of every matchup played so far. */
+  results: MatchResult[];
   duration: number;
   scoreA: number;
   scoreB: number;
-  countA: number;
-  countB: number;
   topTappers: TopTapper[];
 
   // quiz
@@ -61,16 +75,17 @@ export interface Game {
   answeredCount: number;
   leaderboard: LeaderRow[];
 
-  /** Names and sides; only sent to the host screen. */
-  roster: { name: string; team: Team | '-' }[];
+  /** Player names; only sent to the host screen. */
+  roster: string[];
 }
 
 /** What the server tells one phone about its own player. */
 export interface Me {
   name: string;
-  team: Team | '-';
   round: number;
-  taps: number;
+  /** Taps this player has had credited to each side this round. */
+  a: number;
+  b: number;
   answers: Record<string, { c: number; ms: number }>;
   /** Points earned per revealed question. */
   gains: Record<string, number>;
@@ -80,7 +95,7 @@ export interface Me {
 }
 
 export type CreateOptions =
-  | { type: 'tug-of-war'; labelA: string; labelB: string; duration: number }
+  | { type: 'tug-of-war'; matchups: Matchup[]; duration: number }
   | { type: 'quiz'; questions: Question[] };
 
 export type TugPhase = 'lobby' | 'countdown' | 'live' | 'tally' | 'done';

@@ -6,7 +6,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowRight, Plus, RefreshCw, Trash2, Trophy, Zap } from 'lucide-react';
 import { conn } from './lib/conn';
-import type { CreateOptions, Game, Me, Question } from './lib/game';
+import type { CreateOptions, Game, Matchup, Me, Question } from './lib/game';
 import { cn } from './lib/utils';
 import { Button, Input } from './components/ui';
 import { HostView } from './views/Host';
@@ -209,7 +209,7 @@ function Home({
           <span className="text-indigo-600">Tug-of-War</span>
         </h1>
         <p className="text-gray-500 text-lg font-medium max-w-md mx-auto">
-          Pick a side, tap as fast as you can, and pull the room your way.
+          Two choices, one rope. Tap for the side you want and watch the room decide.
         </p>
       </div>
 
@@ -239,7 +239,7 @@ function Home({
           <Button variant="outline" onClick={() => onCreate('create-tug')} className="py-6 flex-col rounded-[2rem]">
             <Zap className="w-7 h-7" />
             <span className="font-black text-lg">Tug of War</span>
-            <span className="text-xs font-medium opacity-70">Two sides, one rope</span>
+            <span className="text-xs font-medium opacity-70">A series of this-vs-that rounds</span>
           </Button>
           <Button variant="outline" onClick={() => onCreate('create-quiz')} className="py-6 flex-col rounded-[2rem]">
             <Trophy className="w-7 h-7" />
@@ -261,31 +261,90 @@ function CreateTug({
   onCancel: () => void;
   onCreate: (opts: CreateOptions) => void;
 }) {
-  const [labelA, setLabelA] = useState('');
-  const [labelB, setLabelB] = useState('');
-  const [duration, setDuration] = useState(30);
-  const ready = labelA.trim() && labelB.trim();
+  const [rows, setRows] = useState<Matchup[]>([{ a: '', b: '' }]);
+  const [duration, setDuration] = useState(15);
+  const [bulk, setBulk] = useState(false);
+  const [bulkText, setBulkText] = useState('');
+
+  // One matchup per line: "Pizza vs Tacos" (also accepts " v ", tab or comma).
+  const parsed = (bulk ? bulkText.split('\n').map(parseLine) : rows)
+    .map((m) => ({ a: m.a.trim(), b: m.b.trim() }))
+    .filter((m) => m.a && m.b);
+
+  const setRow = (i: number, side: 'a' | 'b', v: string) =>
+    setRows(rows.map((r, j) => (j === i ? { ...r, [side]: v } : r)));
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ready || busy) return;
-    onCreate({ type: 'tug-of-war', labelA: labelA.trim(), labelB: labelB.trim(), duration });
+    if (!parsed.length || busy) return;
+    onCreate({ type: 'tug-of-war', matchups: parsed, duration });
   };
 
   return (
     <form onSubmit={submit} className="flex-1 flex flex-col gap-6">
       <div>
-        <h2 className="text-3xl font-black">Set up the battle</h2>
-        <p className="text-gray-500 font-medium">Name the two sides and choose how long it lasts.</p>
+        <h2 className="text-3xl font-black">Set up the matchups</h2>
+        <p className="text-gray-500 font-medium">
+          Each matchup is one round. The room taps for whichever side they want to win.
+        </p>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Input label="Side A" value={labelA} onChange={setLabelA} placeholder="e.g. Pirates" maxLength={20} autoFocus />
-        <Input label="Side B" value={labelB} onChange={setLabelB} placeholder="e.g. Ninjas" maxLength={20} />
+
+      <div className="flex gap-2 text-sm font-bold">
+        {(['One by one', 'Paste a list'] as const).map((label, i) => (
+          <button
+            key={label}
+            type="button"
+            onClick={() => setBulk(i === 1)}
+            className={cn(
+              'px-4 py-2 rounded-xl border-2',
+              bulk === (i === 1) ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-gray-200 text-gray-600',
+            )}
+          >
+            {label}
+          </button>
+        ))}
       </div>
+
+      {bulk ? (
+        <label className="flex flex-col gap-1.5">
+          <span className="text-sm font-bold text-gray-500">One matchup per line, like “Pizza vs Tacos”</span>
+          <textarea
+            value={bulkText}
+            onChange={(e) => setBulkText(e.target.value)}
+            rows={8}
+            placeholder={'Pizza vs Tacos\nCats vs Dogs\nBeach vs Mountains'}
+            className="px-4 py-3 bg-white border-2 border-gray-200 rounded-2xl focus:border-indigo-500 focus:outline-none text-lg font-medium"
+          />
+        </label>
+      ) : (
+        <div className="space-y-3">
+          {rows.map((r, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <span className="w-7 shrink-0 text-center font-black text-gray-400">{i + 1}</span>
+              <Input value={r.a} onChange={(v) => setRow(i, 'a', v)} placeholder="e.g. Pizza" maxLength={30} autoFocus={i === 0} />
+              <span className="font-black text-gray-400 text-sm">vs</span>
+              <Input value={r.b} onChange={(v) => setRow(i, 'b', v)} placeholder="e.g. Tacos" maxLength={30} />
+              <button
+                type="button"
+                disabled={rows.length === 1}
+                onClick={() => setRows(rows.filter((_, j) => j !== i))}
+                aria-label={`Remove matchup ${i + 1}`}
+                className="p-2 text-red-400 hover:text-red-600 disabled:opacity-0"
+              >
+                <Trash2 className="w-5 h-5" />
+              </button>
+            </div>
+          ))}
+          <Button variant="outline" onClick={() => setRows([...rows, { a: '', b: '' }])} className="w-full">
+            <Plus className="w-5 h-5" /> Add matchup
+          </Button>
+        </div>
+      )}
+
       <div className="space-y-2">
-        <span className="text-sm font-bold text-gray-500 uppercase tracking-wider ml-1">Duration</span>
-        <div className="grid grid-cols-3 gap-3">
-          {[15, 30, 60].map((d) => (
+        <span className="text-sm font-bold text-gray-500 uppercase tracking-wider ml-1">Seconds per matchup</span>
+        <div className="grid grid-cols-4 gap-3">
+          {[10, 15, 20, 30].map((d) => (
             <button
               key={d}
               type="button"
@@ -306,12 +365,17 @@ function CreateTug({
         <Button variant="ghost" onClick={onCancel} className="flex-1">
           Cancel
         </Button>
-        <Button type="submit" disabled={!ready || busy} className="flex-[2]">
-          {busy ? 'Creating…' : 'Create game'}
+        <Button type="submit" disabled={!parsed.length || busy} className="flex-[2]">
+          {busy ? 'Creating…' : `Create game (${parsed.length} matchup${parsed.length === 1 ? '' : 's'})`}
         </Button>
       </div>
     </form>
   );
+}
+
+function parseLine(line: string): Matchup {
+  const parts = line.split(/\s+vs\.?\s+|\s+v\s+|\t|,/i);
+  return { a: parts[0] ?? '', b: parts.slice(1).join(' ') };
 }
 
 const BLANK: Question = { text: '', options: ['', '', '', ''], correctIndex: 0, timeLimit: 20 };

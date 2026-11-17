@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { ArrowRight, Check, Copy, Play, RefreshCw, Trophy, Users, X } from 'lucide-react';
 import { conn } from '../lib/conn';
-import { joinUrl, ropePosition, tugPhase, tugTimes, type Game } from '../lib/game';
+import { hasNextMatchup, joinUrl, ropePosition, tugPhase, tugTimes, type Game } from '../lib/game';
 import { cn } from '../lib/utils';
 import { Button, QUIZ_COLORS, QUIZ_SHAPES, Rope, TEAM, useNow, useWakeLock } from '../components/ui';
-import { Leaderboard } from './Player';
+import { Leaderboard, Results } from './Player';
 
 /** The scoreboard for the room: put this screen on the projector. */
 export function HostView({ game, onLeave }: { game: Game; onLeave: () => void }) {
@@ -64,40 +64,44 @@ function TugHost({ game }: { game: Game }) {
   const { open, end } = tugTimes(game);
 
   const players = game.roster;
-  const teamA = players.filter((p) => p.team === 'A');
-  const teamB = players.filter((p) => p.team === 'B');
   const start = () => conn.send({ t: 'start' });
-  const rematch = () => conn.send({ t: 'rematch' });
+  const next = () => conn.send({ t: 'next' });
+  const replay = () => conn.send({ t: 'replay' });
+  const restart = () => conn.send({ t: 'rematch' });
+  const matchNo = `Matchup ${game.mIndex + 1} of ${game.matchups.length}`;
 
   if (phase === 'lobby') {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-8 p-6 sm:p-10">
         <JoinPanel game={game} />
-        <div className="w-full max-w-4xl grid grid-cols-2 gap-4">
-          {(['A', 'B'] as const).map((t) => {
-            const roster = t === 'A' ? teamA : teamB;
-            return (
-              <div key={t} className={cn('rounded-3xl p-5', TEAM[t].soft)}>
-                <div className="flex justify-between items-baseline gap-2">
-                  <h3 className={cn('text-2xl sm:text-3xl font-black break-words min-w-0', TEAM[t].text)}>
-                    {t === 'A' ? game.labelA : game.labelB}
-                  </h3>
-                  <span className="font-black text-2xl tabular-nums">{roster.length}</span>
-                </div>
-                <div className="flex flex-wrap gap-1.5 mt-3 min-h-8">
-                  {roster.map((p, i) => (
-                    <span key={i} className="px-2.5 py-1 rounded-full bg-white/10 text-xs font-bold">
-                      {p.name}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
+        <div className="w-full max-w-3xl rounded-3xl bg-white/5 p-5 space-y-2">
+          <p className="text-xs font-black uppercase tracking-[0.3em] text-white/50">
+            {game.matchups.length} matchup{game.matchups.length === 1 ? '' : 's'} · {game.duration}s each
+          </p>
+          <ol className="flex flex-wrap gap-2">
+            {game.matchups.map((m, i) => (
+              <li key={i} className="px-3 py-1.5 rounded-full bg-white/10 text-sm font-bold">
+                <span className="opacity-50 mr-1">{i + 1}.</span>
+                {m.a} <span className="opacity-50">vs</span> {m.b}
+              </li>
+            ))}
+          </ol>
+        </div>
+        <div className="flex flex-col items-center gap-3">
+          <div className="flex items-center gap-2 text-2xl font-black">
+            <Users className="w-6 h-6" /> {players.length} joined
+          </div>
+          <div className="flex flex-wrap justify-center gap-1.5 max-w-3xl">
+            {players.map((name, i) => (
+              <span key={i} className="px-2.5 py-1 rounded-full bg-white/10 text-xs font-bold">
+                {name}
+              </span>
+            ))}
+          </div>
         </div>
         <Button onClick={start} disabled={players.length === 0} className="px-12 py-5 text-2xl">
           <Play className="w-7 h-7 fill-current" />
-          Start {game.duration}s battle
+          Start matchup 1
         </Button>
         {players.length === 0 && (
           <p className="text-white/50 font-bold -mt-4">Waiting for the first player to join…</p>
@@ -118,6 +122,7 @@ function TugHost({ game }: { game: Game }) {
         <div className="flex items-center gap-2 font-black text-white/60">
           <Users className="w-5 h-5" /> {players.length}
           <span className="ml-3 tracking-widest">{game.code}</span>
+          <span className="ml-3">{matchNo}</span>
         </div>
         <div
           className={cn(
@@ -151,7 +156,8 @@ function TugHost({ game }: { game: Game }) {
         <Rope position={ropePosition(scoreA, scoreB)} className="h-6 mx-6 sm:mx-16 text-[14px]" />
 
         {phase === 'countdown' && (
-          <div className="absolute inset-0 flex items-center justify-center bg-slate-950/80">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-slate-950/85">
+            <p className="text-3xl font-black text-white/70">{matchNo}</p>
             <div key={countdown ?? 'r'} className="count-pop text-[14rem] leading-none font-black">
               {countdown === null || countdown > 3 ? '…' : Math.max(1, countdown)}
             </div>
@@ -159,7 +165,7 @@ function TugHost({ game }: { game: Game }) {
         )}
         {phase === 'tally' && (
           <p className="text-center text-xl font-black text-white/60 animate-pulse">
-            Counting the last pulls…
+            Counting the last taps…
           </p>
         )}
         {done && scoreA === scoreB && (
@@ -169,19 +175,33 @@ function TugHost({ game }: { game: Game }) {
 
       {done && (
         <div className="flex flex-col items-center gap-5">
+          {!hasNextMatchup(game) && game.results.length > 1 && <Results game={game} large />}
           {game.topTappers.length > 0 && (
             <div className="flex flex-wrap justify-center gap-2">
+              <span className="px-2 py-2 text-sm font-bold text-white/50">Fastest thumbs</span>
               {game.topTappers.map((t, i) => (
-                <span key={i} className={cn('px-4 py-2 rounded-full font-bold text-sm', TEAM[t.team].soft)}>
+                <span key={i} className="px-4 py-2 rounded-full font-bold text-sm bg-white/10">
                   <span className="opacity-60 mr-1">#{i + 1}</span>
                   {t.name} <span className="font-black tabular-nums ml-1">{t.taps}</span>
                 </span>
               ))}
             </div>
           )}
-          <Button onClick={rematch} className="px-10 py-4 text-xl">
-            <RefreshCw className="w-6 h-6" /> Rematch
-          </Button>
+          <div className="flex flex-wrap justify-center gap-3">
+            {hasNextMatchup(game) ? (
+              <Button onClick={next} className="px-10 py-4 text-xl">
+                Next: {game.matchups[game.mIndex + 1].a} vs {game.matchups[game.mIndex + 1].b}
+                <ArrowRight className="w-6 h-6" />
+              </Button>
+            ) : (
+              <Button onClick={restart} className="px-10 py-4 text-xl">
+                <RefreshCw className="w-6 h-6" /> Play the series again
+              </Button>
+            )}
+            <Button onClick={replay} variant="dark" className="px-6 py-4">
+              <RefreshCw className="w-5 h-5" /> Redo this matchup
+            </Button>
+          </div>
         </div>
       )}
     </div>
@@ -208,9 +228,9 @@ function QuizHost({ game }: { game: Game }) {
           <Users className="w-6 h-6" /> {players.length} joined
         </div>
         <div className="flex flex-wrap justify-center gap-1.5 max-w-3xl">
-          {players.map((p, i) => (
+          {players.map((name, i) => (
             <span key={i} className="px-2.5 py-1 rounded-full bg-white/10 text-xs font-bold">
-              {p.name}
+              {name}
             </span>
           ))}
         </div>

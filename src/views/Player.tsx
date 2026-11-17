@@ -4,6 +4,7 @@ import { conn, serverNow } from '../lib/conn';
 import {
   MAX_TAPS_PER_SECOND,
   TAP_SEND_MS,
+  hasNextMatchup,
   ropePosition,
   tugPhase,
   tugTimes,
@@ -53,21 +54,20 @@ function JoinForm({ game, onLeave }: { game: Game; onLeave: () => void }) {
   const [name, setName] = useState(localStorage.getItem('blitz_name') || '');
   const trimmed = name.trim().slice(0, 20);
 
-  const go = (team: Team | '-') => {
+  const go = (e: React.FormEvent) => {
+    e.preventDefault();
     if (!trimmed) return;
     localStorage.setItem('blitz_name', trimmed);
-    conn.send({ t: 'join', name: trimmed, team });
+    conn.send({ t: 'join', name: trimmed });
   };
 
   return (
     <Screen>
       <LeaveButton onLeave={onLeave} />
-      <div className="w-full max-w-sm space-y-6">
+      <form onSubmit={go} className="w-full max-w-sm space-y-6">
         <div>
           <p className="text-xs font-black uppercase tracking-[0.3em] text-white/50">Game {game.code}</p>
-          <h2 className="text-3xl font-black mt-1">
-            {game.type === 'quiz' ? 'Quiz Blitz' : `${game.labelA} vs ${game.labelB}`}
-          </h2>
+          <h2 className="text-3xl font-black mt-1">{game.type === 'quiz' ? 'Quiz Blitz' : 'Tug-of-War Blitz'}</h2>
         </div>
         <Input
           value={name}
@@ -77,74 +77,55 @@ function JoinForm({ game, onLeave }: { game: Game; onLeave: () => void }) {
           autoFocus
           className="text-center text-xl"
         />
-        {game.type === 'quiz' ? (
-          <Button onClick={() => go('-')} disabled={!trimmed} className="w-full py-5 text-xl">
-            Join quiz
-          </Button>
-        ) : (
-          <div className="space-y-3">
-            <p className="text-sm font-bold text-white/60">Pick your side</p>
-            <div className="grid grid-cols-2 gap-3">
-              {(['A', 'B'] as const).map((t) => (
-                <button
-                  key={t}
-                  disabled={!trimmed}
-                  onClick={() => go(t)}
-                  className={cn(
-                    'py-8 px-3 rounded-3xl font-black text-xl break-words disabled:opacity-40 active:scale-95 transition-transform',
-                    TEAM[t].bg,
-                  )}
-                >
-                  {t === 'A' ? game.labelA : game.labelB}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+        <Button type="submit" disabled={!trimmed} className="w-full py-5 text-xl">
+          Join
+        </Button>
+      </form>
     </Screen>
   );
 }
 
 /**
  * Counts taps on the phone instantly and trickles them to the server.
- * The server's total (`me.taps`) is the truth; after a reconnect we resend
- * whatever it has not seen yet.
+ * The server's totals (`me.a`, `me.b`) are the truth; after a reconnect we
+ * resend whatever it has not seen yet.
  */
 function useTaps(game: Game, me: Me) {
   const gameLatest = useRef(game);
   gameLatest.current = game;
-  const local = useRef(me.taps);
-  const sent = useRef(me.taps);
+  const local = useRef({ a: me.a, b: me.b });
+  const sent = useRef({ a: me.a, b: me.b });
   const round = useRef(me.round);
   const synced = useRef(me.epoch);
-  const [taps, setTaps] = useState(me.taps);
+  const [, render] = useState(0);
 
   // Every update from the server about me: adopt its count as "delivered".
   useEffect(() => {
     if (round.current !== me.round) {
       round.current = me.round;
-      local.current = me.taps;
+      local.current = { a: me.a, b: me.b };
     } else {
-      local.current = Math.max(local.current, me.taps);
+      local.current = { a: Math.max(local.current.a, me.a), b: Math.max(local.current.b, me.b) };
     }
-    sent.current = me.taps;
+    sent.current = { a: me.a, b: me.b };
     synced.current = me.epoch;
-    setTaps(local.current);
+    render((n) => n + 1);
   }, [me]);
 
   useEffect(() => {
     const i = setInterval(() => {
-      const n = local.current - sent.current;
-      if (n <= 0 || synced.current !== conn.epoch) return;
-      if (conn.sendNow({ t: 'tap', n })) sent.current = local.current;
+      const a = local.current.a - sent.current.a;
+      const b = local.current.b - sent.current.b;
+      if ((a <= 0 && b <= 0) || synced.current !== conn.epoch) return;
+      if (conn.sendNow({ t: 'tap', a: Math.max(0, a), b: Math.max(0, b) })) sent.current = { ...local.current };
+      render((n) => n + 1);
     }, TAP_SEND_MS);
     return () => clearInterval(i);
   }, []);
 
   // Ignores anything faster than a human can tap.
   const bucket = useRef({ tokens: MAX_TAPS_PER_SECOND, at: performance.now() });
-  const tap = useCallback(() => {
+  const tap = useCallback((side: Team) => {
     if (tugPhase(gameLatest.current, serverNow()) !== 'live') return false;
     const b = bucket.current;
     const now = performance.now();
@@ -152,32 +133,36 @@ function useTaps(game: Game, me: Me) {
     b.at = now;
     if (b.tokens < 1) return false;
     b.tokens -= 1;
-    local.current += 1;
-    setTaps(local.current);
+    if (side === 'A') local.current.a += 1;
+    else local.current.b += 1;
+    render((n) => n + 1);
     return true;
   }, []);
 
-  return { tap, taps };
+  // Taps not yet sent, so this phone's own taps show up straight away.
+  const unsent = {
+    a: Math.max(0, local.current.a - sent.current.a),
+    b: Math.max(0, local.current.b - sent.current.b),
+  };
+  return { tap, mine: local.current, unsent };
 }
 
 function TugPlayer({ game, me, onLeave }: { game: Game; me: Me; onLeave: () => void }) {
   const now = useNow(100);
   const phase = tugPhase(game, now);
-  const { tap, taps } = useTaps(game, me);
-  const team = me.team === 'B' ? 'B' : 'A';
-  const myLabel = team === 'A' ? game.labelA : game.labelB;
+  const { tap, mine, unsent } = useTaps(game, me);
   const { open, end } = tugTimes(game);
-  const padRef = useRef<HTMLDivElement>(null);
+  const matchNo = `Matchup ${game.mIndex + 1} of ${game.matchups.length}`;
 
-  const onPointerDown = (e: React.PointerEvent) => {
-    if (!tap()) return;
+  const press = (side: Team) => (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!tap(side)) return;
     navigator.vibrate?.(8);
-    const pad = padRef.current;
-    if (!pad) return;
+    const pad = e.currentTarget;
+    const box = pad.getBoundingClientRect();
     const dot = document.createElement('span');
     dot.className = 'tap-ripple';
-    dot.style.left = `${e.clientX}px`;
-    dot.style.top = `${e.clientY}px`;
+    dot.style.left = `${e.clientX - box.left}px`;
+    dot.style.top = `${e.clientY - box.top}px`;
     dot.addEventListener('animationend', () => dot.remove());
     pad.appendChild(dot);
   };
@@ -187,25 +172,17 @@ function TugPlayer({ game, me, onLeave }: { game: Game; me: Me; onLeave: () => v
       <Screen>
         <LeaveButton onLeave={onLeave} />
         <p className="text-xs font-black uppercase tracking-[0.3em] text-white/50">You're in, {me.name}</p>
-        <div className="w-full max-w-sm grid grid-cols-2 gap-3">
-          {(['A', 'B'] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => t !== me.team && conn.send({ t: 'team', team: t })}
-              className={cn(
-                'py-6 px-3 rounded-3xl font-black text-lg break-words transition-all',
-                TEAM[t].bg,
-                me.team === t ? 'ring-4 ring-white scale-100' : 'opacity-40 scale-95',
-              )}
-            >
-              {t === 'A' ? game.labelA : game.labelB}
-              <span className="block text-xs font-bold opacity-80 mt-1">
-                {t === 'A' ? game.countA : game.countB} pulling
-              </span>
-            </button>
-          ))}
+        <div className="space-y-2">
+          <p className="text-white/60 font-bold">{matchNo}</p>
+          <h2 className="text-3xl font-black">
+            <span className={TEAM.A.text}>{game.labelA}</span>
+            <span className="text-white/40 mx-3 text-xl">vs</span>
+            <span className={TEAM.B.text}>{game.labelB}</span>
+          </h2>
         </div>
-        <p className="text-white/60 font-bold">Tap a side to switch. Waiting for the host to start…</p>
+        <p className="text-white/60 font-bold max-w-xs">
+          When it starts, tap the side you want to win. Tap fast — the rope follows the room.
+        </p>
       </Screen>
     );
   }
@@ -213,17 +190,14 @@ function TugPlayer({ game, me, onLeave }: { game: Game; me: Me; onLeave: () => v
   if (phase === 'done') {
     const winner: Team | null =
       game.scoreA === game.scoreB ? null : game.scoreA > game.scoreB ? 'A' : 'B';
-    const rank = game.topTappers.findIndex((t) => t.name === me.name && t.taps === me.taps);
+    const more = hasNextMatchup(game);
     return (
-      <Screen className={winner === team ? TEAM[team].bg : 'bg-slate-900'}>
+      <Screen className={winner ? TEAM[winner].bg : 'bg-slate-900'}>
         <LeaveButton onLeave={onLeave} />
+        <p className="text-xs font-black uppercase tracking-[0.3em] text-white/70">{matchNo}</p>
         <Trophy className="w-14 h-14 text-yellow-300" />
-        <h2 className="text-4xl font-black">
-          {winner === null
-            ? "It's a tie!"
-            : winner === team
-              ? 'You won!'
-              : `${winner === 'A' ? game.labelA : game.labelB} takes it!`}
+        <h2 className="text-4xl font-black break-words max-w-full">
+          {winner === null ? "It's a tie!" : `${winner === 'A' ? game.labelA : game.labelB} wins!`}
         </h2>
         <div className="flex items-end gap-6 font-black">
           <div>
@@ -237,66 +211,109 @@ function TugPlayer({ game, me, onLeave }: { game: Game; me: Me; onLeave: () => v
           </div>
         </div>
         <p className="font-bold text-white/80">
-          You pulled <span className="text-white font-black">{me.taps}</span> times
-          {rank >= 0 ? ` — #${rank + 1} in the room!` : ''}
+          You tapped {me.a} for {game.labelA} and {me.b} for {game.labelB}.
         </p>
-        <p className="text-sm font-bold text-white/50">Stay here for a rematch.</p>
+        {more ? (
+          <p className="text-sm font-bold text-white/60">
+            Next up: {game.matchups[game.mIndex + 1].a} vs {game.matchups[game.mIndex + 1].b}
+          </p>
+        ) : (
+          <Results game={game} />
+        )}
       </Screen>
     );
   }
 
   const countdown = open === null ? null : Math.ceil((open - now) / 1000);
   const remaining = end === null ? game.duration : Math.max(0, Math.ceil((end - now) / 1000));
+  const scoreA = game.scoreA + unsent.a;
+  const scoreB = game.scoreB + unsent.b;
+  const live = phase === 'live';
 
-  return (
-    <div
-      ref={padRef}
-      onPointerDown={onPointerDown}
+  const side = (t: Team) => (
+    <button
+      onPointerDown={press(t)}
       onContextMenu={(e) => e.preventDefault()}
+      disabled={!live}
+      aria-label={`Vote ${t === 'A' ? game.labelA : game.labelB}`}
       className={cn(
-        'tap-pad fixed inset-0 overflow-hidden text-white flex flex-col items-center justify-between p-6 text-center',
-        TEAM[team].bg,
+        'tap-pad relative flex-1 overflow-hidden flex flex-col items-center justify-center gap-1 px-6 text-center transition-[filter] active:brightness-110',
+        TEAM[t].bg,
+        !live && 'brightness-75',
       )}
     >
-      <div className="w-full max-w-md space-y-3 pointer-events-none">
-        <div className="flex justify-between items-center font-black">
-          <span className="tabular-nums">{game.scoreA}</span>
-          <span className="px-4 py-1 rounded-full bg-black/25 tabular-nums text-lg">
-            {phase === 'live' ? `${remaining}s` : phase === 'tally' ? 'TIME!' : 'READY'}
-          </span>
-          <span className="tabular-nums">{game.scoreB}</span>
-        </div>
-        <Rope position={ropePosition(game.scoreA, game.scoreB)} className="text-[8px]" />
-        <div className="flex justify-between text-[11px] font-bold uppercase opacity-80">
-          <span className="truncate max-w-[45%]">{game.labelA}</span>
-          <span className="truncate max-w-[45%]">{game.labelB}</span>
-        </div>
-      </div>
+      <span className="text-3xl sm:text-4xl font-black uppercase break-words max-w-full pointer-events-none">
+        {t === 'A' ? game.labelA : game.labelB}
+      </span>
+      <span className="text-sm font-bold opacity-80 tabular-nums pointer-events-none">
+        your taps: {t === 'A' ? mine.a : mine.b}
+      </span>
+    </button>
+  );
 
-      <div className="pointer-events-none">
-        {phase === 'countdown' && (
+  return (
+    <div className="fixed inset-0 flex flex-col text-white bg-slate-950 select-none">
+      {side('A')}
+      <div className="shrink-0 px-5 py-3 space-y-2 bg-slate-950">
+        <div className="flex justify-between items-center font-black">
+          <span className={cn('text-2xl tabular-nums', TEAM.A.text)}>{scoreA}</span>
+          <span className="px-4 py-1 rounded-full bg-white/10 tabular-nums">
+            {live ? `${remaining}s` : phase === 'tally' ? 'TIME!' : 'READY'}
+          </span>
+          <span className={cn('text-2xl tabular-nums', TEAM.B.text)}>{scoreB}</span>
+        </div>
+        <Rope position={ropePosition(scoreA, scoreB)} className="text-[8px]" />
+      </div>
+      {side('B')}
+
+      {phase === 'countdown' && (
+        <div className="absolute inset-0 bg-slate-950/85 flex flex-col items-center justify-center gap-4 pointer-events-none">
+          <p className="font-black text-white/70">{matchNo}</p>
           <div key={countdown ?? 'r'} className="count-pop text-[9rem] leading-none font-black">
             {countdown === null || countdown > 3 ? '…' : Math.max(1, countdown)}
           </div>
-        )}
-        {phase === 'live' && (
-          <>
-            <div className="text-[7rem] leading-none font-black tabular-nums">{taps}</div>
-            <div className="text-2xl font-black uppercase tracking-widest mt-2">Tap anywhere!</div>
-          </>
-        )}
-        {phase === 'tally' && (
-          <>
-            <div className="text-6xl font-black">TIME!</div>
-            <div className="text-lg font-bold opacity-80 mt-2">Counting…</div>
-          </>
-        )}
-      </div>
-
-      <div className="pointer-events-none font-black uppercase tracking-widest text-sm opacity-80">
-        Team {myLabel}
-      </div>
+          <p className="text-2xl font-black px-6 text-center">
+            <span className={TEAM.A.text}>{game.labelA}</span>
+            <span className="text-white/40 mx-2">vs</span>
+            <span className={TEAM.B.text}>{game.labelB}</span>
+          </p>
+        </div>
+      )}
+      {phase === 'tally' && (
+        <div className="absolute inset-0 bg-slate-950/70 flex items-center justify-center pointer-events-none">
+          <div className="text-6xl font-black">TIME!</div>
+        </div>
+      )}
     </div>
+  );
+}
+
+/** Every matchup's result, shown after the last one. */
+export function Results({ game, large }: { game: Game; large?: boolean }) {
+  return (
+    <ol className={cn('w-full space-y-2 text-left', large ? 'max-w-3xl' : 'max-w-sm')}>
+      {game.results.map((r, i) => {
+        const win = r.scoreA === r.scoreB ? null : r.scoreA > r.scoreB ? 'A' : 'B';
+        return (
+          <li
+            key={i}
+            className={cn('grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 py-3 rounded-2xl bg-black/25 font-bold', large && 'text-2xl py-4')}
+          >
+            <span className={cn('truncate', win === 'A' ? 'text-white font-black' : 'text-white/50')}>
+              {win === 'A' && '🏆 '}
+              {r.a}
+            </span>
+            <span className="tabular-nums text-white/70 text-sm">
+              {r.scoreA} – {r.scoreB}
+            </span>
+            <span className={cn('truncate text-right', win === 'B' ? 'text-white font-black' : 'text-white/50')}>
+              {r.b}
+              {win === 'B' && ' 🏆'}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 

@@ -45,9 +45,10 @@ function createRoom(opts) {
     status: 'waiting',
     round: 0,
     startTime: null,
-    labelA: clean(opts?.labelA, 20) || 'A',
-    labelB: clean(opts?.labelB, 20) || 'B',
-    duration: [15, 30, 60].includes(opts?.duration) ? opts.duration : 30,
+    matchups: [],
+    mIndex: 0,
+    results: [],
+    duration: [10, 15, 20, 30, 60].includes(opts?.duration) ? opts.duration : 15,
     finalA: 0,
     finalB: 0,
     topTappers: [],
@@ -64,6 +65,13 @@ function createRoom(opts) {
     lastScore: '',
     touched: Date.now(),
   };
+  if (room.type === 'tug-of-war') {
+    room.matchups = (Array.isArray(opts?.matchups) ? opts.matchups : [])
+      .slice(0, 50)
+      .map((m) => ({ a: clean(m?.a, 30), b: clean(m?.b, 30) }))
+      .filter((m) => m.a && m.b);
+    if (!room.matchups.length) return null;
+  }
   if (room.type === 'quiz') {
     room.questions = (Array.isArray(opts.questions) ? opts.questions : []).slice(0, 50).map((q) => ({
       text: clean(q?.text, 140),
@@ -82,21 +90,18 @@ function tugScores(room) {
   let a = 0;
   let b = 0;
   for (const p of room.players.values()) {
-    if (p.team === 'A') a += p.taps;
-    else if (p.team === 'B') b += p.taps;
+    a += p.a;
+    b += p.b;
   }
   return [a, b];
 }
 
 function publicState(room, forHost) {
-  let countA = 0;
-  let countB = 0;
   let answered = 0;
   for (const p of room.players.values()) {
-    if (p.team === 'A') countA++;
-    else if (p.team === 'B') countB++;
     if (p.answers[room.qIndex]) answered++;
   }
+  const m = room.matchups[room.mIndex];
   const [scoreA, scoreB] = tugScores(room);
   return {
     code: room.code,
@@ -105,13 +110,14 @@ function publicState(room, forHost) {
     round: room.round,
     startTime: room.startTime,
     playerCount: room.players.size,
-    labelA: room.labelA,
-    labelB: room.labelB,
+    labelA: m?.a ?? '',
+    labelB: m?.b ?? '',
+    matchups: room.matchups,
+    mIndex: room.mIndex,
+    results: room.results,
     duration: room.duration,
     scoreA,
     scoreB,
-    countA,
-    countB,
     topTappers: room.topTappers,
     questions: room.questions.map(({ text, options, timeLimit }) => ({ text, options, timeLimit })),
     qIndex: room.qIndex,
@@ -120,7 +126,7 @@ function publicState(room, forHost) {
     revealCounts: room.revealCounts,
     answeredCount: answered,
     leaderboard: room.leaderboard,
-    roster: forHost ? [...room.players.values()].map((p) => ({ name: p.name, team: p.team })) : [],
+    roster: forHost ? [...room.players.values()].map((p) => p.name) : [],
   };
 }
 
@@ -136,9 +142,9 @@ function sendState(room) {
 function sendYou(room, p) {
   const me = {
     name: p.name,
-    team: p.team,
     round: room.round,
-    taps: p.taps,
+    a: p.a,
+    b: p.b,
     answers: p.answers,
     gains: p.gains,
     score: p.score,
@@ -154,7 +160,12 @@ function setTimer(room, ms, fn) {
 // ---- tug of war -----------------------------------------------------------
 
 function startTug(room) {
-  for (const p of room.players.values()) p.taps = 0;
+  room.round++;
+  for (const p of room.players.values()) {
+    p.a = 0;
+    p.b = 0;
+    sendYou(room, p);
+  }
   room.status = 'active';
   room.startTime = Date.now();
   room.topTappers = [];
@@ -165,17 +176,19 @@ function finishTug(room) {
   if (room.status !== 'active') return;
   [room.finalA, room.finalB] = tugScores(room);
   room.status = 'finished';
+  const m = room.matchups[room.mIndex];
+  room.results[room.mIndex] = { a: m.a, b: m.b, scoreA: room.finalA, scoreB: room.finalB };
   room.topTappers = [...room.players.values()]
-    .filter((p) => p.taps > 0 && p.team !== '-')
-    .sort((a, b) => b.taps - a.taps)
-    .slice(0, 5)
-    .map((p) => ({ name: p.name, team: p.team, taps: p.taps }));
+    .map((p) => ({ name: p.name, taps: p.a + p.b }))
+    .filter((p) => p.taps > 0)
+    .sort((x, y) => y.taps - x.taps)
+    .slice(0, 5);
   sendState(room);
   for (const p of room.players.values()) sendYou(room, p);
 }
 
-function tap(room, p, n) {
-  if (room.type !== 'tug-of-war' || room.status !== 'active' || p.team === '-') return;
+function tap(room, p, side, n) {
+  if (room.type !== 'tug-of-war' || room.status !== 'active') return;
   const now = Date.now();
   const open = room.startTime + COUNTDOWN_MS;
   if (now < open || now > open + room.duration * 1000 + TAP_GRACE_MS) return;
@@ -184,7 +197,8 @@ function tap(room, p, n) {
   p.tokenAt = now;
   const accepted = Math.max(0, Math.min(Math.floor(Number(n) || 0), Math.floor(p.tokens)));
   p.tokens -= accepted;
-  p.taps += accepted;
+  if (side === 'B') p.b += accepted;
+  else p.a += accepted;
 }
 
 // ---- quiz -----------------------------------------------------------------
@@ -265,6 +279,10 @@ function rematch(room) {
   room.status = 'waiting';
   room.round++;
   room.startTime = null;
+  room.mIndex = 0;
+  room.results = [];
+  room.finalA = 0;
+  room.finalB = 0;
   room.topTappers = [];
   room.qIndex = 0;
   room.qStart = null;
@@ -272,7 +290,7 @@ function rematch(room) {
   room.revealCounts = [];
   room.leaderboard = [];
   for (const p of room.players.values()) {
-    Object.assign(p, { taps: 0, answers: {}, gains: {}, score: 0 });
+    Object.assign(p, { a: 0, b: 0, answers: {}, gains: {}, score: 0 });
     sendYou(room, p);
   }
 }
@@ -326,7 +344,11 @@ function handle(ws, msg) {
     if (msg.t === 'start' && room.status === 'waiting' && room.players.size > 0) {
       room.type === 'quiz' ? startQuiz(room) : startTug(room);
     } else if (msg.t === 'reveal') return reveal(room);
-    else if (msg.t === 'next') nextQuestion(room);
+    else if (msg.t === 'next' && room.type === 'quiz') nextQuestion(room);
+    else if (msg.t === 'next' && room.status === 'finished' && room.mIndex + 1 < room.matchups.length) {
+      room.mIndex++;
+      startTug(room);
+    } else if (msg.t === 'replay' && room.type === 'tug-of-war' && room.status === 'finished') startTug(room);
     else if (msg.t === 'rematch' && room.status === 'finished') rematch(room);
     else return;
     return sendState(room);
@@ -339,24 +361,22 @@ function handle(ws, msg) {
     let p = room.players.get(ws.pid);
     if (!p) {
       if (room.players.size >= MAX_PLAYERS) return send(ws, { t: 'error', code: 'full', msg: 'This game is full.' });
-      p = { pid: ws.pid, taps: 0, answers: {}, gains: {}, score: 0, tokens: TAP_BURST, tokenAt: Date.now() };
+      p = { pid: ws.pid, a: 0, b: 0, answers: {}, gains: {}, score: 0, tokens: TAP_BURST, tokenAt: Date.now() };
       room.players.set(ws.pid, p);
     }
     p.name = name;
-    p.team = room.type === 'quiz' ? '-' : msg.team === 'B' ? 'B' : 'A';
     room.dirty = true;
     return sendYou(room, p);
   }
 
   const p = ws.pid && room.players.get(ws.pid);
   if (!p) return;
-  if (msg.t === 'tap') return tap(room, p, msg.n);
-  if (msg.t === 'answer') return answer(room, p, msg.c);
-  if (msg.t === 'team' && room.status === 'waiting' && room.type === 'tug-of-war') {
-    p.team = msg.team === 'B' ? 'B' : 'A';
-    room.dirty = true;
-    return sendYou(room, p);
+  if (msg.t === 'tap') {
+    tap(room, p, 'A', msg.a);
+    tap(room, p, 'B', msg.b);
+    return;
   }
+  if (msg.t === 'answer') return answer(room, p, msg.c);
 }
 
 // Push scores to each live room a few times a second, only when they changed.

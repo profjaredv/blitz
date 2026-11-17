@@ -3,8 +3,9 @@
 //   node scripts/loadtest.mjs <join code> [players=60] [server=ws://127.0.0.1:8787/ws]
 //
 // Host a tug-of-war game in a browser, run this, then press Start.
-// Bots tap 6-14 times a second; at the end the script checks that the
-// server's final score equals the taps it credited to each player.
+// Bots tap 6-14 times a second, each leaning toward one side but tapping
+// both. When the first matchup ends the script checks that the server's
+// final score equals the taps it credited to each player.
 import { randomBytes } from 'node:crypto';
 import WebSocket from 'ws';
 
@@ -22,11 +23,11 @@ let finished = 0;
 const bots = [];
 
 function bot(i) {
-  const b = { team: i % 2 ? 'B' : 'A', rate: 6 + Math.random() * 8, sent: 0, credited: null, carry: 0 };
+  const b = { lean: Math.random(), rate: 6 + Math.random() * 8, sentA: 0, sentB: 0, credA: 0, credB: 0, carry: 0 };
   const ws = new WebSocket(URL);
   ws.on('open', () => {
     ws.send(JSON.stringify({ t: 'peek', code, pid: randomBytes(16).toString('hex') }));
-    ws.send(JSON.stringify({ t: 'join', name: `Bot ${i + 1}`, team: b.team }));
+    ws.send(JSON.stringify({ t: 'join', name: `Bot ${i + 1}` }));
   });
   ws.on('message', (data) => {
     const msg = JSON.parse(data.toString());
@@ -41,8 +42,10 @@ function bot(i) {
         b.final = msg.game;
       }
     }
-    if (msg.t === 'you' && b.done) {
-      b.credited = msg.me.taps;
+    if (msg.t === 'you' && b.done && !b.reported) {
+      b.reported = true;
+      b.credA = msg.me.a;
+      b.credB = msg.me.b;
       if (++finished === COUNT) report();
     }
   });
@@ -55,8 +58,11 @@ function bot(i) {
     const n = Math.floor(b.carry);
     if (n > 0) {
       b.carry -= n;
-      b.sent += n;
-      ws.send(JSON.stringify({ t: 'tap', n }));
+      let a = 0;
+      for (let k = 0; k < n; k++) if (Math.random() < b.lean) a++;
+      b.sentA += a;
+      b.sentB += n - a;
+      ws.send(JSON.stringify({ t: 'tap', a, b: n - a }));
     }
   }, 150);
   ws.on('close', () => clearInterval(timer));
@@ -64,15 +70,15 @@ function bot(i) {
 }
 
 function report() {
-  const sum = (t, k) => bots.filter((b) => b.team === t).reduce((n, b) => n + b[k], 0);
+  const sum = (k) => bots.reduce((n, b) => n + b[k], 0);
   const g = bots[0].final;
   console.log(
     JSON.stringify({
       bots: COUNT,
-      sentA: sum('A', 'sent'),
-      sentB: sum('B', 'sent'),
-      creditedA: sum('A', 'credited'),
-      creditedB: sum('B', 'credited'),
+      sentA: sum('sentA'),
+      sentB: sum('sentB'),
+      creditedA: sum('credA'),
+      creditedB: sum('credB'),
       finalA: g.scoreA,
       finalB: g.scoreB,
     }),
