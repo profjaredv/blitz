@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { ArrowRight, Check, Copy, Crown, Moon, Play, RefreshCw, Sun, Trophy, Users, X } from 'lucide-react';
+import { ArrowRight, Check, Copy, Crown, Maximize, Minimize, Moon, Play, RefreshCw, Sun, Trophy, Users, X } from 'lucide-react';
 import { conn } from '../lib/conn';
 import { hasNextMatchup, joinUrl, ropePosition, tugPhase, tugTimes, type Game } from '../lib/game';
 import { cn } from '../lib/utils';
@@ -11,32 +11,61 @@ import { BracketView } from '../components/Bracket';
 /** The scoreboard for the room: put this screen on the projector. */
 export function HostView({ game, onLeave }: { game: Game; onLeave: () => void }) {
   useWakeLock();
+  const [full, setFull] = useState(!!document.fullscreenElement);
+  useEffect(() => {
+    const on = () => setFull(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', on);
+    return () => document.removeEventListener('fullscreenchange', on);
+  }, []);
+
+  const iconBtn = 'p-2 rounded-xl text-ink/40 hover:text-ink hover:bg-ink/10 transition-colors';
   return (
     <div className="fixed inset-0 bg-stage text-ink flex flex-col overflow-y-auto">
-      <button
-        onClick={() => {
-          const theme = game.theme === 'light' ? 'dark' : 'light';
-          localStorage.setItem('blitz_theme', theme);
-          conn.send({ t: 'theme', theme });
-        }}
-        aria-label={game.theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
-        title={game.theme === 'light' ? 'Dark mode' : 'Light mode'}
-        className="absolute top-4 right-14 z-20 p-2 rounded-xl text-ink/40 hover:text-ink hover:bg-ink/10"
-      >
-        {game.theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
-      </button>
-      <button
-        onClick={() => {
-          if (game.status === 'active' && !confirm('Leave the host screen while the game is running?')) return;
-          onLeave();
-        }}
-        aria-label="Leave game"
-        className="absolute top-4 right-4 z-20 p-2 rounded-xl text-ink/40 hover:text-ink hover:bg-ink/10"
-      >
-        <X className="w-5 h-5" />
-      </button>
+      <div className="absolute top-4 right-4 z-20 flex items-center gap-1">
+        {document.fullscreenEnabled && (
+          <button
+            onClick={() => (full ? document.exitFullscreen() : document.documentElement.requestFullscreen()).catch(() => {})}
+            aria-label={full ? 'Exit full screen' : 'Full screen'}
+            title={full ? 'Exit full screen' : 'Full screen (for the projector)'}
+            className={iconBtn}
+          >
+            {full ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+          </button>
+        )}
+        <button
+          onClick={() => {
+            const theme = game.theme === 'light' ? 'dark' : 'light';
+            localStorage.setItem('blitz_theme', theme);
+            conn.send({ t: 'theme', theme });
+          }}
+          aria-label={game.theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+          title={game.theme === 'light' ? 'Dark mode' : 'Light mode'}
+          className={iconBtn}
+        >
+          {game.theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
+        </button>
+        <button
+          onClick={() => {
+            if (game.status === 'active' && !confirm('Leave the host screen while the game is running?')) return;
+            if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+            onLeave();
+          }}
+          aria-label="Leave game"
+          title="Leave"
+          className={iconBtn}
+        >
+          <X className="w-5 h-5" />
+        </button>
+      </div>
       {game.type === 'quiz' ? <QuizHost game={game} /> : <TugHost game={game} />}
     </div>
+  );
+}
+
+function GameTitle({ game }: { game: Game }) {
+  if (!game.title) return null;
+  return (
+    <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-center max-w-4xl text-balance">{game.title}</h1>
   );
 }
 
@@ -49,7 +78,9 @@ function JoinPanel({ game, compact }: { game: Game; compact?: boolean }) {
         <QRCodeSVG value={url} size={compact ? 96 : 200} level="M" />
       </div>
       <div className="text-center sm:text-left">
-        <p className="text-xs font-black uppercase tracking-[0.3em] text-ink/50">Join code</p>
+        <p className="text-sm font-semibold text-ink/60">
+          Go to <span className="text-ink font-bold">{window.location.host}</span> and enter
+        </p>
         <p className={cn('font-black tracking-widest tabular-nums', compact ? 'text-4xl' : 'text-7xl sm:text-8xl')}>
           {game.code}
         </p>
@@ -86,6 +117,7 @@ function TugHost({ game }: { game: Game }) {
   if (phase === 'lobby') {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-8 p-6 sm:p-10">
+        <GameTitle game={game} />
         <JoinPanel game={game} />
         {tournament && game.bracket ? (
           <div className="w-full max-w-6xl rounded-3xl bg-ink/5 p-5">
@@ -294,6 +326,7 @@ function QuizHost({ game }: { game: Game }) {
   if (game.status === 'waiting') {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-8 p-6 sm:p-10">
+        <GameTitle game={game} />
         <JoinPanel game={game} />
         <div className="flex items-center gap-2 text-2xl font-black">
           <Users className="w-6 h-6" /> {players.length} joined

@@ -78,6 +78,7 @@ export interface LeaderRow {
 /** What the server tells every device about a game. Times are server milliseconds. */
 export interface Game {
   code: string;
+  title: string;
   type: GameType;
   status: GameStatus;
   /** Light or dark game screens, chosen by the host for everyone. */

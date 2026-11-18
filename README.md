@@ -19,14 +19,22 @@ WebSockets. There is no database and nothing is billed per tap.
 
 ## Deploy on Railway
 
-1. New Project → Deploy from GitHub repo → pick this repo.
-2. Railway builds with `npm run build` and starts with `npm start`. No
-   environment variables are needed.
-3. Settings → Networking → Generate Domain. That URL is the game.
+1. New Project → Deploy from GitHub repo → pick this repo. Railway builds with
+   `npm run build` and starts with `npm start`.
+2. Settings → Networking → Generate Domain. That URL is the game.
+3. **Accounts and saving:** in the same project, click **+ New → Database →
+   PostgreSQL**. Then open this service's **Variables** tab, add a variable
+   named `DATABASE_URL` and set it to the reference `${{Postgres.DATABASE_URL}}`.
+   Redeploy. The tables are created automatically on start.
 
-Keep it at **one replica**: games live in the server's memory, so a second
-instance would not see them. For the same reason a redeploy or restart ends
-any game in progress, so don't push changes mid-event.
+Without `DATABASE_URL` the app still works: anyone can host, and nothing is
+saved. With it, hosts create an account (email and password), and their
+saved games and the results of every game they run are kept. Players never
+sign in.
+
+Keep the service at **one replica**: live games are held in the server's
+memory, so a redeploy or restart ends any game in progress. Saved games and
+history are in the database and survive.
 
 ## Run locally
 
@@ -50,5 +58,7 @@ the server credited, and the final score. Add a third argument such as
 
 - `server/index.js` – game rules, timing, scoring, anti-cheat tap limit
 - `server/bracket.js` – double-elimination bracket (from Tournament of Stuff)
+- `server/store.js` – accounts, saved games and history (Postgres)
+- `src/pages/` – home, sign-in, dashboard and the three game editors
 - `src/lib/conn.ts` – the phone/host connection, with automatic reconnect
 - `src/views/Host.tsx`, `src/views/Player.tsx` – the two screens

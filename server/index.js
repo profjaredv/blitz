@@ -7,6 +7,16 @@ import { fileURLToPath } from 'node:url';
 import { readFile } from 'node:fs/promises';
 import { WebSocketServer } from 'ws';
 import { createBracket, decide, isPlayable, matchLabel, nextMatch } from './bracket.js';
+import {
+  SESSION_COOKIE,
+  accountsEnabled,
+  handleApi,
+  initStore,
+  readCookie,
+  recordGame,
+  updateGame,
+  userFromToken,
+} from './store.js';
 
 const PORT = Number(process.env.PORT || 8787);
 const DIST = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist');
@@ -174,6 +184,7 @@ function publicState(room, forHost) {
   const champ = room.bracket?.championId && room.bracket.participants.find((p) => p.id === room.bracket.championId);
   return {
     code: room.code,
+    title: room.title,
     type: room.type,
     status: room.status,
     round: room.round,
@@ -204,6 +215,32 @@ function publicState(room, forHost) {
     leaderboard: room.leaderboard,
     roster: forHost ? [...room.players.values()].map((p) => p.name) : [],
   };
+}
+
+/** What gets saved to the host's game history. */
+function summarize(room) {
+  const champ = room.bracket?.championId && room.bracket.participants.find((p) => p.id === room.bracket.championId);
+  return {
+    status: room.status,
+    results: room.results.filter(Boolean),
+    champion: champ ? champ.name : null,
+    leaderboard: room.type === 'quiz' && room.status === 'finished' ? room.leaderboard : undefined,
+    questions: room.type === 'quiz' ? room.questions.length : undefined,
+  };
+}
+
+function save(room) {
+  if (room.gameId) updateGame(room.gameId, room.players.size, summarize(room));
+}
+
+/** Each rematch is its own entry in the host's history. */
+async function startRecord(room) {
+  if (!room.ownerId) return;
+  try {
+    room.gameId = await recordGame(room.ownerId, { setId: room.setId, type: room.type, title: room.title, code: room.code });
+  } catch (err) {
+    console.error('recordGame failed', err.message);
+  }
 }
 
 function sendState(room) {
@@ -271,6 +308,7 @@ function finishTug(room) {
     .slice(0, 5);
   sendState(room);
   for (const p of room.players.values()) sendYou(room, p);
+  save(room);
 }
 
 function tap(room, p, side, n) {
@@ -355,6 +393,7 @@ function nextQuestion(room) {
   if (room.qIndex + 1 >= room.questions.length) {
     room.status = 'finished';
     room.leaderboard = board(room, 10);
+    save(room);
   } else {
     askQuestion(room, room.qIndex + 1);
   }
@@ -402,16 +441,33 @@ function detach(ws) {
   ws.room = null;
 }
 
+async function createFor(ws, opts) {
+  let user = null;
+  if (accountsEnabled()) {
+    user = await userFromToken(ws.token).catch(() => null);
+    if (!user) return send(ws, { t: 'error', code: 'sign_in', msg: 'Sign in to host a game.' });
+  }
+  const room = createRoom(opts);
+  if (!room) return send(ws, { t: 'error', code: 'create_failed', msg: 'Could not create the game.' });
+  room.ownerId = user?.id ?? null;
+  room.setId = opts?.setId ?? null;
+  room.title = String(opts?.title ?? '').trim().slice(0, 80) || defaultTitle(room);
+  await startRecord(room);
+  attach(ws, room, 'host');
+  send(ws, { t: 'created', code: room.code, hostKey: room.hostKey });
+  send(ws, { t: 'state', game: publicState(room, true) });
+}
+
+function defaultTitle(room) {
+  if (room.type === 'quiz') return 'Quiz';
+  if (room.type === 'tournament') return `Tournament: ${room.names.slice(0, 3).join(', ')}…`;
+  return room.matchups.map((m) => `${m.a} vs ${m.b}`).slice(0, 2).join(', ');
+}
+
 function handle(ws, msg) {
   if (msg.t === 'ping') return send(ws, { t: 'pong', t0: msg.t0, now: Date.now() });
 
-  if (msg.t === 'create') {
-    const room = createRoom(msg.opts);
-    if (!room) return send(ws, { t: 'error', code: 'create_failed', msg: 'Could not create the game.' });
-    attach(ws, room, 'host');
-    send(ws, { t: 'created', code: room.code, hostKey: room.hostKey });
-    return send(ws, { t: 'state', game: publicState(room, true) });
-  }
+  if (msg.t === 'create') return createFor(ws, msg.opts);
 
   if (msg.t === 'host' || msg.t === 'peek') {
     const room = rooms.get(String(msg.code));
@@ -452,7 +508,10 @@ function handle(ws, msg) {
         room.bracket.matches.some((x) => x.id === room.current?.matchId && isPlayable(x));
       if (open) startTug(room);
     }
-    else if (msg.t === 'rematch' && room.status === 'finished') rematch(room);
+    else if (msg.t === 'rematch' && room.status === 'finished') {
+      rematch(room);
+      startRecord(room);
+    }
     else return;
     return sendState(room);
   }
@@ -524,6 +583,7 @@ const MIME = {
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', 'http://x');
+  if (await handleApi(req, res, url)) return;
   if (url.pathname === '/healthz') {
     res.writeHead(200, { 'content-type': 'application/json' });
     return res.end(JSON.stringify({ ok: true, rooms: rooms.size, connections: wss.clients.size }));
@@ -547,8 +607,9 @@ const server = http.createServer(async (req, res) => {
 
 const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 32 * 1024 });
 
-wss.on('connection', (ws) => {
+wss.on('connection', (ws, req) => {
   ws.alive = true;
+  ws.token = readCookie(req, SESSION_COOKIE);
   ws.on('pong', () => (ws.alive = true));
   ws.on('message', (data) => {
     let msg;
@@ -559,7 +620,7 @@ wss.on('connection', (ws) => {
     }
     if (msg && typeof msg === 'object') {
       try {
-        handle(ws, msg);
+        Promise.resolve(handle(ws, msg)).catch((err) => console.error('handler error', err));
       } catch (err) {
         console.error('handler error', err);
       }
@@ -581,4 +642,9 @@ setInterval(() => {
   }
 }, 30000);
 
-server.listen(PORT, () => console.log(`Tug-of-War Blitz listening on :${PORT}`));
+initStore()
+  .then(() => server.listen(PORT, () => console.log(`Blitz listening on :${PORT}`)))
+  .catch((err) => {
+    console.error('Database setup failed', err);
+    process.exit(1);
+  });

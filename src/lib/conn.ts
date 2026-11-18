@@ -41,6 +41,12 @@ export const conn = {
     return () => void listeners.delete(fn);
   },
 
+  /** Reconnect, e.g. after signing in so the server sees the new session. */
+  reconnect() {
+    retry = 0;
+    ws?.close();
+  },
+
   onStatus(fn: (open: boolean) => void) {
     statusListeners.add(fn);
     return () => void statusListeners.delete(fn);
