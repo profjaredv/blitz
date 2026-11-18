@@ -3,6 +3,29 @@
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  /* Game screens. The host picks light or dark for the whole room. */
+  --color-stage: #020617; /* background */
+  --color-stage-2: #1e1b4b; /* quiz background */
+  --color-ink: #ffffff; /* text and outlines on the background */
+  --color-team-a: #818cf8;
+  --color-team-b: #fb7185;
+}
+
+:root[data-theme='light'] {
+  --color-stage: #f8fafc;
+  --color-stage-2: #eef2ff;
+  --color-ink: #0f172a;
+  --color-team-a: #4f46e5;
+  --color-team-b: #e11d48;
+}
+
+/* Text on solid team / answer colours stays white in either theme. */
+.on-color {
+  color: #ffffff;
+  --color-ink: #ffffff;
+  --color-team-a: #ffffff;
+  --color-team-b: #ffffff;
 }
 
 @layer base {

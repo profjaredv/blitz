@@ -29,7 +29,7 @@ function Screen({ children, className }: { children: React.ReactNode; className?
   return (
     <div
       className={cn(
-        'fixed inset-0 bg-slate-950 text-white flex flex-col items-center justify-center gap-6 p-6 text-center overflow-y-auto',
+        'fixed inset-0 bg-stage text-ink flex flex-col items-center justify-center gap-6 p-6 text-center overflow-y-auto',
         className,
       )}
     >
@@ -43,7 +43,7 @@ function LeaveButton({ onLeave }: { onLeave: () => void }) {
     <button
       onClick={onLeave}
       aria-label="Leave game"
-      className="absolute top-4 right-4 p-2 rounded-xl text-white/50 hover:text-white hover:bg-white/10"
+      className="absolute top-4 right-4 p-2 rounded-xl text-ink/50 hover:text-ink hover:bg-ink/10"
     >
       <X className="w-5 h-5" />
     </button>
@@ -66,7 +66,7 @@ function JoinForm({ game, onLeave }: { game: Game; onLeave: () => void }) {
       <LeaveButton onLeave={onLeave} />
       <form onSubmit={go} className="w-full max-w-sm space-y-6">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.3em] text-white/50">Game {game.code}</p>
+          <p className="text-xs font-black uppercase tracking-[0.3em] text-ink/50">Game {game.code}</p>
           <h2 className="text-3xl font-black mt-1">{game.type === 'quiz' ? 'Quiz Blitz' : 'Tug-of-War Blitz'}</h2>
         </div>
         <Input
@@ -171,16 +171,16 @@ function TugPlayer({ game, me, onLeave }: { game: Game; me: Me; onLeave: () => v
     return (
       <Screen>
         <LeaveButton onLeave={onLeave} />
-        <p className="text-xs font-black uppercase tracking-[0.3em] text-white/50">You're in, {me.name}</p>
+        <p className="text-xs font-black uppercase tracking-[0.3em] text-ink/50">You're in, {me.name}</p>
         <div className="space-y-2">
-          <p className="text-white/60 font-bold">{matchNo}</p>
+          <p className="text-ink/60 font-bold">{matchNo}</p>
           <h2 className="text-3xl font-black">
             <span className={TEAM.A.text}>{game.labelA}</span>
-            <span className="text-white/40 mx-3 text-xl">vs</span>
+            <span className="text-ink/40 mx-3 text-xl">vs</span>
             <span className={TEAM.B.text}>{game.labelB}</span>
           </h2>
         </div>
-        <p className="text-white/60 font-bold max-w-xs">
+        <p className="text-ink/60 font-bold max-w-xs">
           When it starts, tap the side you want to win. Tap fast — the rope follows the room.
         </p>
       </Screen>
@@ -192,9 +192,9 @@ function TugPlayer({ game, me, onLeave }: { game: Game; me: Me; onLeave: () => v
       game.scoreA === game.scoreB ? null : game.scoreA > game.scoreB ? 'A' : 'B';
     const more = hasNextMatchup(game);
     return (
-      <Screen className={winner ? TEAM[winner].bg : 'bg-slate-900'}>
+      <Screen className={winner ? cn(TEAM[winner].bg, 'on-color') : 'bg-stage'}>
         <LeaveButton onLeave={onLeave} />
-        <p className="text-xs font-black uppercase tracking-[0.3em] text-white/70">{matchNo}</p>
+        <p className="text-xs font-black uppercase tracking-[0.3em] text-ink/70">{matchNo}</p>
         <Trophy className="w-14 h-14 text-yellow-300" />
         <h2 className="text-4xl font-black break-words max-w-full">
           {winner === null ? "It's a tie!" : `${winner === 'A' ? game.labelA : game.labelB} wins!`}
@@ -204,23 +204,23 @@ function TugPlayer({ game, me, onLeave }: { game: Game; me: Me; onLeave: () => v
             <div className="text-xs uppercase opacity-70">{game.labelA}</div>
             <div className="text-4xl tabular-nums">{game.scoreA}</div>
           </div>
-          <div className="text-white/40 pb-1">vs</div>
+          <div className="text-ink/40 pb-1">vs</div>
           <div>
             <div className="text-xs uppercase opacity-70">{game.labelB}</div>
             <div className="text-4xl tabular-nums">{game.scoreB}</div>
           </div>
         </div>
-        <p className="font-bold text-white/80">
+        <p className="font-bold text-ink/80">
           You tapped {me.a} for {game.labelA} and {me.b} for {game.labelB}.
         </p>
         {game.champion ? (
           <p className="text-2xl font-black text-yellow-300">🏆 {game.champion} is the champion!</p>
         ) : more ? (
-          <p className="text-sm font-bold text-white/60">
+          <p className="text-sm font-bold text-ink/60">
             Next up: {game.upNext!.a} vs {game.upNext!.b}
           </p>
         ) : game.type === 'tournament' ? (
-          <p className="text-sm font-bold text-white/60">Waiting for the host…</p>
+          <p className="text-sm font-bold text-ink/60">Waiting for the host…</p>
         ) : (
           <Results game={game} />
         )}
@@ -243,6 +243,7 @@ function TugPlayer({ game, me, onLeave }: { game: Game; me: Me; onLeave: () => v
       className={cn(
         'tap-pad relative flex-1 overflow-hidden flex flex-col items-center justify-center gap-1 px-6 text-center transition-[filter] active:brightness-110',
         TEAM[t].bg,
+        'on-color',
         !live && 'brightness-75',
       )}
     >
@@ -256,12 +257,12 @@ function TugPlayer({ game, me, onLeave }: { game: Game; me: Me; onLeave: () => v
   );
 
   return (
-    <div className="fixed inset-0 flex flex-col text-white bg-slate-950 select-none">
+    <div className="fixed inset-0 flex flex-col text-ink bg-stage select-none">
       {side('A')}
-      <div className="shrink-0 px-5 py-3 space-y-2 bg-slate-950">
+      <div className="shrink-0 px-5 py-3 space-y-2 bg-stage">
         <div className="flex justify-between items-center font-black">
           <span className={cn('text-2xl tabular-nums', TEAM.A.text)}>{scoreA}</span>
-          <span className="px-4 py-1 rounded-full bg-white/10 tabular-nums">
+          <span className="px-4 py-1 rounded-full bg-ink/10 tabular-nums">
             {live ? `${remaining}s` : phase === 'tally' ? 'TIME!' : 'READY'}
           </span>
           <span className={cn('text-2xl tabular-nums', TEAM.B.text)}>{scoreB}</span>
@@ -271,20 +272,20 @@ function TugPlayer({ game, me, onLeave }: { game: Game; me: Me; onLeave: () => v
       {side('B')}
 
       {phase === 'countdown' && (
-        <div className="absolute inset-0 bg-slate-950/85 flex flex-col items-center justify-center gap-4 pointer-events-none">
-          <p className="font-black text-white/70">{matchNo}</p>
+        <div className="absolute inset-0 bg-stage/85 flex flex-col items-center justify-center gap-4 pointer-events-none">
+          <p className="font-black text-ink/70">{matchNo}</p>
           <div key={countdown ?? 'r'} className="count-pop text-[9rem] leading-none font-black">
             {countdown === null || countdown > 3 ? '…' : Math.max(1, countdown)}
           </div>
           <p className="text-2xl font-black px-6 text-center">
             <span className={TEAM.A.text}>{game.labelA}</span>
-            <span className="text-white/40 mx-2">vs</span>
+            <span className="text-ink/40 mx-2">vs</span>
             <span className={TEAM.B.text}>{game.labelB}</span>
           </p>
         </div>
       )}
       {phase === 'tally' && (
-        <div className="absolute inset-0 bg-slate-950/70 flex items-center justify-center pointer-events-none">
+        <div className="absolute inset-0 bg-stage/70 flex items-center justify-center pointer-events-none">
           <div className="text-6xl font-black">TIME!</div>
         </div>
       )}
@@ -301,16 +302,16 @@ export function Results({ game, large }: { game: Game; large?: boolean }) {
         return (
           <li
             key={i}
-            className={cn('grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 py-3 rounded-2xl bg-black/25 font-bold', large && 'text-2xl py-4')}
+            className={cn('grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 py-3 rounded-2xl bg-ink/10 font-bold', large && 'text-2xl py-4')}
           >
-            <span className={cn('truncate', win === 'A' ? 'text-white font-black' : 'text-white/50')}>
+            <span className={cn('truncate', win === 'A' ? 'text-ink font-black' : 'text-ink/50')}>
               {win === 'A' && '🏆 '}
               {r.a}
             </span>
-            <span className="tabular-nums text-white/70 text-sm">
+            <span className="tabular-nums text-ink/70 text-sm">
               {r.scoreA} – {r.scoreB}
             </span>
-            <span className={cn('truncate text-right', win === 'B' ? 'text-white font-black' : 'text-white/50')}>
+            <span className={cn('truncate text-right', win === 'B' ? 'text-ink font-black' : 'text-ink/50')}>
               {r.b}
               {win === 'B' && ' 🏆'}
             </span>
@@ -330,9 +331,9 @@ function QuizPlayer({ game, me, onLeave }: { game: Game; me: Me; onLeave: () => 
     return (
       <Screen>
         <LeaveButton onLeave={onLeave} />
-        <p className="text-xs font-black uppercase tracking-[0.3em] text-white/50">You're in</p>
+        <p className="text-xs font-black uppercase tracking-[0.3em] text-ink/50">You're in</p>
         <h2 className="text-4xl font-black">{me.name}</h2>
-        <p className="text-white/60 font-bold">
+        <p className="text-ink/60 font-bold">
           {game.questions.length} questions. Waiting for the host to start…
         </p>
       </Screen>
@@ -346,7 +347,7 @@ function QuizPlayer({ game, me, onLeave }: { game: Game; me: Me; onLeave: () => 
         <LeaveButton onLeave={onLeave} />
         <Trophy className="w-14 h-14 text-yellow-300" />
         <h2 className="text-5xl font-black tabular-nums">{me.score}</h2>
-        <p className="font-bold text-white/70">
+        <p className="font-bold text-ink/70">
           {rank >= 0 ? `You finished #${rank + 1}!` : 'Your final score'}
         </p>
         <Leaderboard rows={game.leaderboard} highlight={me.name} />
@@ -373,14 +374,14 @@ function QuizPlayer({ game, me, onLeave }: { game: Game; me: Me; onLeave: () => 
   };
 
   return (
-    <div className="fixed inset-0 bg-indigo-950 text-white flex flex-col p-5 gap-4 overflow-y-auto">
+    <div className="fixed inset-0 bg-stage-2 text-ink flex flex-col p-5 gap-4 overflow-y-auto">
       <div className="flex justify-between items-center font-black text-sm">
-        <span className="px-3 py-1 rounded-full bg-white/10">
+        <span className="px-3 py-1 rounded-full bg-ink/10">
           Q{game.qIndex + 1}/{game.questions.length}
         </span>
         <span className="tabular-nums">{me.score} pts</span>
       </div>
-      <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+      <div className="h-2 rounded-full bg-ink/10 overflow-hidden">
         <div
           className="h-full bg-yellow-400 transition-[width] duration-200 ease-linear"
           style={{ width: `${isRevealed ? 0 : (left / limitMs) * 100}%` }}
@@ -392,7 +393,7 @@ function QuizPlayer({ game, me, onLeave }: { game: Game; me: Me; onLeave: () => 
         <div
           className={cn(
             'rounded-2xl p-4 text-center font-black text-xl flex items-center justify-center gap-2',
-            gained > 0 ? 'bg-emerald-500' : 'bg-white/10',
+            gained > 0 ? 'bg-emerald-500 on-color' : 'bg-ink/10',
           )}
         >
           {gained > 0 ? <Check className="w-6 h-6" /> : <X className="w-6 h-6" />}
@@ -410,8 +411,9 @@ function QuizPlayer({ game, me, onLeave }: { game: Game; me: Me; onLeave: () => 
               className={cn(
                 'p-5 rounded-3xl text-lg font-black text-left flex items-center gap-3 transition-all active:scale-[0.98]',
                 QUIZ_COLORS[i],
+                'on-color',
                 mine !== null && mine !== i && 'opacity-30',
-                mine === i && 'ring-4 ring-white',
+                mine === i && 'ring-4 ring-ink',
                 mine === null && closed && 'opacity-30',
                 correct !== null && (correct === i ? 'opacity-100 ring-4 ring-emerald-300' : 'opacity-30'),
               )}
@@ -424,7 +426,7 @@ function QuizPlayer({ game, me, onLeave }: { game: Game; me: Me; onLeave: () => 
           ) : null,
         )}
       </div>
-      <p className="text-center text-sm font-bold text-white/50 min-h-5">
+      <p className="text-center text-sm font-bold text-ink/50 min-h-5">
         {isRevealed
           ? 'Next question coming up…'
           : mine !== null
@@ -446,8 +448,8 @@ export function Leaderboard({ rows, highlight }: { rows: { name: string; score: 
           key={i}
           className={cn(
             'flex justify-between items-center px-4 py-3 rounded-2xl font-bold',
-            i === 0 ? 'bg-yellow-400 text-slate-900' : 'bg-white/10',
-            highlight === r.name && i !== 0 && 'ring-2 ring-white',
+            i === 0 ? 'bg-yellow-400 text-slate-900' : 'bg-ink/10',
+            highlight === r.name && i !== 0 && 'ring-2 ring-ink',
           )}
         >
           <span className="flex gap-3 min-w-0">

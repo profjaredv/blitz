@@ -7,7 +7,7 @@ const VARIANTS = {
   secondary: 'bg-white text-indigo-700 hover:bg-indigo-50 shadow-lg shadow-indigo-500/10',
   outline: 'border-2 border-indigo-600 text-indigo-600 hover:bg-indigo-50',
   ghost: 'text-gray-500 hover:bg-gray-100',
-  dark: 'bg-white/10 text-white hover:bg-white/20',
+  dark: 'bg-ink/10 text-ink hover:bg-ink/20',
 };
 
 export function Button({
@@ -113,8 +113,8 @@ export function useWakeLock() {
 }
 
 export const TEAM = {
-  A: { bg: 'bg-indigo-600', text: 'text-indigo-400', soft: 'bg-indigo-500/15', ring: 'ring-indigo-400' },
-  B: { bg: 'bg-rose-500', text: 'text-rose-400', soft: 'bg-rose-500/15', ring: 'ring-rose-400' },
+  A: { bg: 'bg-indigo-600', text: 'text-team-a', soft: 'bg-indigo-500/15', ring: 'ring-indigo-400' },
+  B: { bg: 'bg-rose-500', text: 'text-team-b', soft: 'bg-rose-500/15', ring: 'ring-rose-400' },
 } as const;
 
 export const QUIZ_COLORS = ['bg-red-500', 'bg-blue-500', 'bg-amber-500', 'bg-emerald-500'];
@@ -123,7 +123,7 @@ export const QUIZ_SHAPES = ['▲', '◆', '●', '■'];
 /** Territory bar: the leading team's colour pushes the knot into the other half. */
 export function Rope({ position, className }: { position: number; className?: string }) {
   return (
-    <div className={cn('relative h-4 rounded-full overflow-visible ring-2 ring-white/40', className)}>
+    <div className={cn('relative h-4 rounded-full overflow-visible ring-2 ring-ink/20', className)}>
       <div className="absolute inset-0 rounded-full overflow-hidden flex">
         <div
           className="h-full bg-indigo-600 transition-[width] duration-500 ease-linear"
@@ -131,7 +131,7 @@ export function Rope({ position, className }: { position: number; className?: st
         />
         <div className="h-full flex-1 bg-rose-500" />
       </div>
-      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-0.5 h-[220%] bg-white/40" />
+      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-0.5 h-[220%] bg-ink/40" />
       <div
         className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 transition-[left] duration-500 ease-linear"
         style={{ left: `${50 - position * 42}%` }}

@@ -10,6 +10,7 @@ export const hasNextMatchup = (g: Game) => !!g.upNext;
 export type GameType = 'tug-of-war' | 'quiz' | 'tournament';
 export type GameStatus = 'waiting' | 'active' | 'finished';
 export type Team = 'A' | 'B';
+export type Theme = 'light' | 'dark';
 
 export interface PublicQuestion {
   text: string;
@@ -73,6 +74,8 @@ export interface Game {
   code: string;
   type: GameType;
   status: GameStatus;
+  /** Light or dark game screens, chosen by the host for everyone. */
+  theme: Theme;
   /** Bumped on every rematch. */
   round: number;
   startTime: number | null;

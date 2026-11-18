@@ -1,7 +1,8 @@
 # Tug-of-War Blitz
 
 The host screen (put it on the projector) shows the join code, QR code, live
-score and winner. Players join on their phones with just a nickname.
+score and winner. Players join on their phones with just a nickname. The sun/moon
+button on the host screen switches the whole room between dark and light.
 
 - **Tug of War** – a series of matchups (Pizza vs Tacos, Cats vs Dogs, …). In
   each round everyone taps for whichever side they want and the rope shows the

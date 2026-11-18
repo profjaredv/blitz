@@ -26,7 +26,7 @@ export function BracketView({
 
   return (
     <div className="w-full space-y-6">
-      <Section title="Winners bracket" accent="text-indigo-300">
+      <Section title="Winners bracket" accent="text-team-a">
         {section('winners').map(({ round, matches }, i, all) => (
           <Column key={round} title={i === all.length - 1 ? 'Final' : `Round ${round}`}>
             {matches.map((m) => (
@@ -35,7 +35,7 @@ export function BracketView({
           </Column>
         ))}
       </Section>
-      <Section title="Losers bracket" accent="text-rose-300">
+      <Section title="Losers bracket" accent="text-team-b">
         {section('losers').map(({ round, matches }, i, all) => (
           <Column key={round} title={i === all.length - 1 ? 'Final' : `Round ${round}`}>
             {matches.map((m) => (
@@ -44,7 +44,7 @@ export function BracketView({
           </Column>
         ))}
       </Section>
-      <Section title={bracket.isReset ? 'Grand final · decider' : 'Grand final'} accent="text-yellow-300">
+      <Section title={bracket.isReset ? 'Grand final · decider' : 'Grand final'} accent="text-amber-500">
         <Column title="">
           {section('grand-final')[0]?.matches.map((m) => (
             <Card key={m.id} m={m} current={m.id === currentId} onPlay={onPlay} />
@@ -72,7 +72,7 @@ function Section({ title, accent, children }: { title: string; accent: string; c
 function Column({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-2 shrink-0 w-48">
-      {title && <span className="text-[11px] font-bold text-white/40 uppercase">{title}</span>}
+      {title && <span className="text-[11px] font-bold text-ink/40 uppercase">{title}</span>}
       <div className="flex flex-col justify-around gap-2 flex-1">{children}</div>
     </div>
   );
@@ -96,9 +96,9 @@ function Card({
       <div
         className={cn(
           'px-3 py-1.5 truncate text-sm font-bold',
-          won && 'text-white bg-white/10',
-          lost && 'text-white/30 line-through',
-          !p && 'text-white/20 italic font-medium',
+          won && 'text-ink bg-ink/10',
+          lost && 'text-ink/30 line-through',
+          !p && 'text-ink/20 italic font-medium',
         )}
       >
         {p ? p.name : m.isBye ? 'bye' : '—'}
@@ -112,8 +112,8 @@ function Card({
       onClick={() => clickable && onPlay!(m.id)}
       aria-label={clickable ? `Play ${m.p1!.name} vs ${m.p2!.name}` : undefined}
       className={cn(
-        'relative text-left rounded-xl overflow-hidden border divide-y divide-white/5 transition-colors',
-        current ? 'border-yellow-400 ring-2 ring-yellow-400/40' : ready ? 'border-indigo-400/70' : 'border-white/10',
+        'relative text-left text-ink rounded-xl overflow-hidden border divide-y divide-ink/5 transition-colors',
+        current ? 'border-yellow-400 ring-2 ring-yellow-400/40' : ready ? 'border-indigo-400/70' : 'border-ink/10',
         clickable && 'hover:bg-indigo-500/20 cursor-pointer',
         m.isBye && 'opacity-40',
       )}

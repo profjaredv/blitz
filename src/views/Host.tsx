@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { ArrowRight, Check, Copy, Crown, Play, RefreshCw, Trophy, Users, X } from 'lucide-react';
+import { ArrowRight, Check, Copy, Crown, Moon, Play, RefreshCw, Sun, Trophy, Users, X } from 'lucide-react';
 import { conn } from '../lib/conn';
 import { hasNextMatchup, joinUrl, ropePosition, tugPhase, tugTimes, type Game } from '../lib/game';
 import { cn } from '../lib/utils';
@@ -12,14 +12,26 @@ import { BracketView } from '../components/Bracket';
 export function HostView({ game, onLeave }: { game: Game; onLeave: () => void }) {
   useWakeLock();
   return (
-    <div className="fixed inset-0 bg-slate-950 text-white flex flex-col overflow-y-auto">
+    <div className="fixed inset-0 bg-stage text-ink flex flex-col overflow-y-auto">
+      <button
+        onClick={() => {
+          const theme = game.theme === 'light' ? 'dark' : 'light';
+          localStorage.setItem('blitz_theme', theme);
+          conn.send({ t: 'theme', theme });
+        }}
+        aria-label={game.theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+        title={game.theme === 'light' ? 'Dark mode' : 'Light mode'}
+        className="absolute top-4 right-14 z-20 p-2 rounded-xl text-ink/40 hover:text-ink hover:bg-ink/10"
+      >
+        {game.theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
+      </button>
       <button
         onClick={() => {
           if (game.status === 'active' && !confirm('Leave the host screen while the game is running?')) return;
           onLeave();
         }}
         aria-label="Leave game"
-        className="absolute top-4 right-4 z-20 p-2 rounded-xl text-white/40 hover:text-white hover:bg-white/10"
+        className="absolute top-4 right-4 z-20 p-2 rounded-xl text-ink/40 hover:text-ink hover:bg-ink/10"
       >
         <X className="w-5 h-5" />
       </button>
@@ -37,7 +49,7 @@ function JoinPanel({ game, compact }: { game: Game; compact?: boolean }) {
         <QRCodeSVG value={url} size={compact ? 96 : 200} level="M" />
       </div>
       <div className="text-center sm:text-left">
-        <p className="text-xs font-black uppercase tracking-[0.3em] text-white/50">Join code</p>
+        <p className="text-xs font-black uppercase tracking-[0.3em] text-ink/50">Join code</p>
         <p className={cn('font-black tracking-widest tabular-nums', compact ? 'text-4xl' : 'text-7xl sm:text-8xl')}>
           {game.code}
         </p>
@@ -48,7 +60,7 @@ function JoinPanel({ game, compact }: { game: Game; compact?: boolean }) {
               setCopied(true);
               setTimeout(() => setCopied(false), 2000);
             }}
-            className="mt-2 inline-flex items-center gap-2 text-sm font-bold text-white/60 hover:text-white"
+            className="mt-2 inline-flex items-center gap-2 text-sm font-bold text-ink/60 hover:text-ink"
           >
             {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
             {copied ? 'Link copied' : 'Copy join link'}
@@ -78,17 +90,17 @@ function TugHost({ game }: { game: Game }) {
       <div className="flex-1 flex flex-col items-center justify-center gap-8 p-6 sm:p-10">
         <JoinPanel game={game} />
         {tournament && game.bracket ? (
-          <div className="w-full max-w-6xl rounded-3xl bg-white/5 p-5">
+          <div className="w-full max-w-6xl rounded-3xl bg-ink/5 p-5">
             <BracketView bracket={game.bracket} currentId={game.current?.matchId} />
           </div>
         ) : (
-          <div className="w-full max-w-3xl rounded-3xl bg-white/5 p-5 space-y-2">
-            <p className="text-xs font-black uppercase tracking-[0.3em] text-white/50">
+          <div className="w-full max-w-3xl rounded-3xl bg-ink/5 p-5 space-y-2">
+            <p className="text-xs font-black uppercase tracking-[0.3em] text-ink/50">
               {game.matchups.length} matchup{game.matchups.length === 1 ? '' : 's'} · {game.duration}s each
             </p>
             <ol className="flex flex-wrap gap-2">
               {game.matchups.map((m, i) => (
-                <li key={i} className="px-3 py-1.5 rounded-full bg-white/10 text-sm font-bold">
+                <li key={i} className="px-3 py-1.5 rounded-full bg-ink/10 text-sm font-bold">
                   <span className="opacity-50 mr-1">{i + 1}.</span>
                   {m.a} <span className="opacity-50">vs</span> {m.b}
                 </li>
@@ -102,7 +114,7 @@ function TugHost({ game }: { game: Game }) {
           </div>
           <div className="flex flex-wrap justify-center gap-1.5 max-w-3xl">
             {players.map((name, i) => (
-              <span key={i} className="px-2.5 py-1 rounded-full bg-white/10 text-xs font-bold">
+              <span key={i} className="px-2.5 py-1 rounded-full bg-ink/10 text-xs font-bold">
                 {name}
               </span>
             ))}
@@ -113,7 +125,7 @@ function TugHost({ game }: { game: Game }) {
           {tournament ? `Start: ${game.labelA} vs ${game.labelB}` : 'Start matchup 1'}
         </Button>
         {players.length === 0 && (
-          <p className="text-white/50 font-bold -mt-4">Waiting for the first player to join…</p>
+          <p className="text-ink/50 font-bold -mt-4">Waiting for the first player to join…</p>
         )}
       </div>
     );
@@ -127,8 +139,8 @@ function TugHost({ game }: { game: Game }) {
 
   return (
     <div className="flex-1 flex flex-col p-6 sm:p-10 gap-6">
-      <div className="flex justify-between items-center pr-10">
-        <div className="flex items-center gap-2 font-black text-white/60">
+      <div className="flex justify-between items-center pr-20">
+        <div className="flex items-center gap-2 font-black text-ink/60">
           <Users className="w-5 h-5" /> {players.length}
           <span className="ml-3 tracking-widest">{game.code}</span>
           <span className="ml-3">{matchNo}</span>
@@ -136,7 +148,7 @@ function TugHost({ game }: { game: Game }) {
         <div
           className={cn(
             'px-6 py-2 rounded-full font-black text-3xl tabular-nums',
-            phase === 'live' && remaining <= 5 ? 'bg-rose-500' : 'bg-white/10',
+            phase === 'live' && remaining <= 5 ? 'bg-rose-500 on-color' : 'bg-ink/10',
           )}
         >
           {phase === 'countdown' ? 'READY' : phase === 'live' ? `${remaining}s` : done ? 'FINAL' : 'TIME!'}
@@ -165,15 +177,15 @@ function TugHost({ game }: { game: Game }) {
         <Rope position={ropePosition(scoreA, scoreB)} className="h-6 mx-6 sm:mx-16 text-[14px]" />
 
         {phase === 'countdown' && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-slate-950/85">
-            <p className="text-3xl font-black text-white/70">{matchNo}</p>
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-stage/85">
+            <p className="text-3xl font-black text-ink/70">{matchNo}</p>
             <div key={countdown ?? 'r'} className="count-pop text-[14rem] leading-none font-black">
               {countdown === null || countdown > 3 ? '…' : Math.max(1, countdown)}
             </div>
           </div>
         )}
         {phase === 'tally' && (
-          <p className="text-center text-xl font-black text-white/60 animate-pulse">
+          <p className="text-center text-xl font-black text-ink/60 animate-pulse">
             Counting the last taps…
           </p>
         )}
@@ -192,9 +204,9 @@ function TugHost({ game }: { game: Game }) {
           {!tournament && !hasNextMatchup(game) && game.results.length > 1 && <Results game={game} large />}
           {game.topTappers.length > 0 && (
             <div className="flex flex-wrap justify-center gap-2">
-              <span className="px-2 py-2 text-sm font-bold text-white/50">Fastest thumbs</span>
+              <span className="px-2 py-2 text-sm font-bold text-ink/50">Fastest thumbs</span>
               {game.topTappers.map((t, i) => (
-                <span key={i} className="px-4 py-2 rounded-full font-bold text-sm bg-white/10">
+                <span key={i} className="px-4 py-2 rounded-full font-bold text-sm bg-ink/10">
                   <span className="opacity-60 mr-1">#{i + 1}</span>
                   {t.name} <span className="font-black tabular-nums ml-1">{t.taps}</span>
                 </span>
@@ -219,7 +231,7 @@ function TugHost({ game }: { game: Game }) {
             )}
           </div>
           {tournament && game.bracket && (
-            <div className="w-full max-w-6xl rounded-3xl bg-white/5 p-5 mt-4">
+            <div className="w-full max-w-6xl rounded-3xl bg-ink/5 p-5 mt-4">
               <BracketView bracket={game.bracket} onPlay={game.champion ? undefined : play} />
             </div>
           )}
@@ -250,7 +262,7 @@ function QuizHost({ game }: { game: Game }) {
         </div>
         <div className="flex flex-wrap justify-center gap-1.5 max-w-3xl">
           {players.map((name, i) => (
-            <span key={i} className="px-2.5 py-1 rounded-full bg-white/10 text-xs font-bold">
+            <span key={i} className="px-2.5 py-1 rounded-full bg-ink/10 text-xs font-bold">
               {name}
             </span>
           ))}
@@ -281,15 +293,15 @@ function QuizHost({ game }: { game: Game }) {
   const last = game.qIndex + 1 >= game.questions.length;
 
   return (
-    <div className="flex-1 flex flex-col p-6 sm:p-10 gap-6 bg-indigo-950">
-      <div className="flex justify-between items-center pr-10 font-black">
-        <span className="px-4 py-2 rounded-full bg-white/10">
+    <div className="flex-1 flex flex-col p-6 sm:p-10 gap-6 bg-stage-2">
+      <div className="flex justify-between items-center pr-20 font-black">
+        <span className="px-4 py-2 rounded-full bg-ink/10">
           Q{game.qIndex + 1} / {game.questions.length}
         </span>
-        <span className="text-white/70">
+        <span className="text-ink/70">
           {game.answeredCount} / {game.playerCount} answered
         </span>
-        <span className="px-5 py-2 rounded-full bg-white/10 text-2xl tabular-nums">
+        <span className="px-5 py-2 rounded-full bg-ink/10 text-2xl tabular-nums">
           {isRevealed ? '—' : `${Math.ceil(left / 1000)}s`}
         </span>
       </div>
@@ -306,6 +318,7 @@ function QuizHost({ game }: { game: Game }) {
               className={cn(
                 'p-5 rounded-3xl text-xl sm:text-2xl font-black flex items-center gap-4 transition-opacity',
                 QUIZ_COLORS[i],
+                'on-color',
                 correct !== null && correct !== i && 'opacity-30',
               )}
             >
@@ -329,7 +342,7 @@ function QuizHost({ game }: { game: Game }) {
           <>
             <div className="flex flex-wrap justify-center gap-2">
               {game.leaderboard.map((r, i) => (
-                <span key={i} className="px-4 py-2 rounded-full bg-white/10 font-bold text-sm">
+                <span key={i} className="px-4 py-2 rounded-full bg-ink/10 font-bold text-sm">
                   <span className="opacity-60 mr-1">#{i + 1}</span>
                   {r.name} <span className="font-black tabular-nums ml-1">{r.score}</span>
                 </span>

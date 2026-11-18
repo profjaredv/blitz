@@ -107,7 +107,7 @@ export default function App() {
   const create = (opts: CreateOptions) => {
     setError(null);
     setBusy(true);
-    conn.send({ t: 'create', opts });
+    conn.send({ t: 'create', opts: { ...opts, theme: localStorage.getItem('blitz_theme') === 'light' ? 'light' : 'dark' } });
   };
 
   const leave = () => {
@@ -117,6 +117,11 @@ export default function App() {
     setMe(null);
     setView('home');
   };
+
+  // Everyone in a game sees the host's theme.
+  useEffect(() => {
+    document.documentElement.dataset.theme = game?.theme ?? 'dark';
+  }, [game?.theme]);
 
   const offline = !online && (
     <div
@@ -142,10 +147,10 @@ export default function App() {
 
   if (session) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center gap-6">
+      <div className="min-h-screen bg-stage flex flex-col items-center justify-center gap-6">
         {offline}
-        <RefreshCw className="w-10 h-10 text-white/60 animate-spin" />
-        <button onClick={leave} className="text-white/50 font-bold text-sm hover:text-white">
+        <RefreshCw className="w-10 h-10 text-ink/60 animate-spin" />
+        <button onClick={leave} className="text-ink/50 font-bold text-sm hover:text-ink">
           Cancel
         </button>
       </div>

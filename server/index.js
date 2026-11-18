@@ -45,6 +45,7 @@ function createRoom(opts) {
     type: ['quiz', 'tournament'].includes(opts?.type) ? opts.type : 'tug-of-war',
     status: 'waiting',
     round: 0,
+    theme: opts?.theme === 'light' ? 'light' : 'dark',
     startTime: null,
     matchups: [],
     mIndex: 0,
@@ -148,6 +149,7 @@ function publicState(room, forHost) {
     type: room.type,
     status: room.status,
     round: room.round,
+    theme: room.theme,
     startTime: room.startTime,
     playerCount: room.players.size,
     labelA: m?.a ?? '',
@@ -402,6 +404,10 @@ function handle(ws, msg) {
   if (msg.t === 'leave') return detach(ws);
 
   if (ws.role === 'host') {
+    if (msg.t === 'theme') {
+      room.theme = msg.theme === 'light' ? 'light' : 'dark';
+      return sendState(room);
+    }
     const between = room.status === 'waiting' || room.status === 'finished';
     if (msg.t === 'start' && room.status === 'waiting' && room.players.size > 0) {
       if (room.type === 'quiz') startQuiz(room);
@@ -456,7 +462,7 @@ function handle(ws, msg) {
 setInterval(() => {
   for (const room of rooms.values()) {
     if (room.dirty) sendState(room);
-    else if (room.type === 'tug-of-war' && room.status === 'active') {
+    else if (room.type !== 'quiz' && room.status === 'active') {
       const [a, b] = tugScores(room);
       const key = `${a}:${b}`;
       if (key === room.lastScore) continue;
