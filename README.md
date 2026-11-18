@@ -6,11 +6,12 @@ button on the host screen switches the whole room between dark and light.
 
 - **Tug of War** – a series of matchups (Pizza vs Tacos, Cats vs Dogs, …). In
   each round everyone taps for whichever side they want and the rope shows the
-  room deciding in real time.
+  room deciding in real time. Between rounds the host plays the next one on
+  the list or picks any other unplayed matchup.
 - **Tournament of Stuff** – paste 4, 8, 12, 16 or 32 entries and Blitz builds a
   double-elimination bracket. Every match is a tap battle and the winner
-  advances automatically. The host can click any ready match in the bracket to
-  play it next. A tie leaves the match open to redo.
+  advances automatically. Between matches the host can pick any match whose
+  two entrants are known, from the buttons or by clicking it in the bracket. A tie leaves the match open to redo.
 - **Quiz Blitz** – fastest right answer scores most.
 
 One small Node server serves the app and runs every game in memory over

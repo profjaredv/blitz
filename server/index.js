@@ -112,17 +112,45 @@ function stageOf(room) {
     const m = room.current && room.bracket.matches.find((x) => x.id === room.current.matchId);
     return m ? matchLabel(room.bracket, m) : 'Tournament';
   }
-  return `Matchup ${room.mIndex + 1} of ${room.matchups.length}`;
+  // Matchups can be played in any order, so count rounds rather than list position.
+  const played = room.matchups.filter((_, i) => room.results[i]).length;
+  const counted = room.results[room.mIndex] ? played : played + 1;
+  return `Round ${Math.min(counted, room.matchups.length)} of ${room.matchups.length}`;
 }
 
-/** What the host's "next" button will play. */
-function upNext(room) {
+/**
+ * Every matchup the host could play next: unplayed matchups in a series,
+ * or bracket matches whose two entrants are already known. Default first.
+ */
+function choices(room) {
+  if (room.status === 'active') return [];
   if (room.type === 'tournament') {
-    if (room.status !== 'finished') return null;
-    const m = nextMatch(room.bracket);
-    return m ? { a: m.p1.name, b: m.p2.name } : null;
+    const first = nextMatch(room.bracket);
+    if (!first) return [];
+    return [first, ...room.bracket.matches.filter((m) => isPlayable(m) && m !== first)].map((m) => ({
+      key: m.id,
+      a: m.p1.name,
+      b: m.p2.name,
+      label: matchLabel(room.bracket, m),
+    }));
   }
-  return room.matchups[room.mIndex + 1] ?? null;
+  if (room.type !== 'tug-of-war') return [];
+  return room.matchups
+    .map((m, i) => ({ key: String(i), a: m.a, b: m.b, label: `#${i + 1}` }))
+    .filter((_, i) => !room.results[i]);
+}
+
+/** Starts the chosen matchup (a list index or bracket match id), or the default. */
+function playChoice(room, key) {
+  const options = choices(room);
+  const pick = options.find((c) => c.key === key) ?? options[0];
+  if (!pick || room.players.size === 0) return;
+  if (room.type === 'tournament') setTournamentCurrent(room, pick.key);
+  else {
+    room.mIndex = Number(pick.key);
+    room.current = room.matchups[room.mIndex];
+  }
+  startTug(room);
 }
 
 function tugScores(room) {
@@ -159,7 +187,8 @@ function publicState(room, forHost) {
     results: room.results,
     current: room.current,
     stage: stageOf(room),
-    upNext: upNext(room),
+    choices: choices(room),
+    upNext: choices(room)[0] ?? null,
     bracket: room.bracket,
     champion: champ ? champ.name : null,
     duration: room.duration,
@@ -409,18 +438,13 @@ function handle(ws, msg) {
       return sendState(room);
     }
     const between = room.status === 'waiting' || room.status === 'finished';
-    if (msg.t === 'start' && room.status === 'waiting' && room.players.size > 0) {
-      if (room.type === 'quiz') startQuiz(room);
-      else if (room.current) startTug(room);
+    if (msg.t === 'start' && room.status === 'waiting' && room.type === 'quiz' && room.players.size > 0) {
+      startQuiz(room);
     } else if (msg.t === 'reveal') return reveal(room);
     else if (msg.t === 'next' && room.type === 'quiz') nextQuestion(room);
-    else if (msg.t === 'next' && room.type === 'tug-of-war' && room.status === 'finished' && room.mIndex + 1 < room.matchups.length) {
-      room.mIndex++;
-      room.current = room.matchups[room.mIndex];
-      startTug(room);
-    } else if (msg.t === 'next' && room.type === 'tournament' && between && room.players.size > 0) {
-      // Plays the requested match, or the bracket's next one.
-      if (setTournamentCurrent(room, typeof msg.matchId === 'string' ? msg.matchId : null)) startTug(room);
+    else if ((msg.t === 'next' || msg.t === 'start') && room.type !== 'quiz' && between) {
+      // Plays the matchup the host picked, or the default one.
+      playChoice(room, typeof msg.key === 'string' ? msg.key : null);
     } else if (msg.t === 'replay' && room.type !== 'quiz' && room.status === 'finished') {
       // Redo the last round. In a tournament only an undecided (tied) match can be redone.
       const open =

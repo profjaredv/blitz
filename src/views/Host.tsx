@@ -77,13 +77,11 @@ function TugHost({ game }: { game: Game }) {
   const { open, end } = tugTimes(game);
 
   const players = game.roster;
-  const start = () => conn.send({ t: 'start' });
-  const next = () => conn.send({ t: 'next' });
   const replay = () => conn.send({ t: 'replay' });
   const restart = () => conn.send({ t: 'rematch' });
   const matchNo = game.stage;
   const tournament = game.type === 'tournament';
-  const play = (matchId: string) => conn.send({ t: 'next', matchId });
+  const play = (key: string) => conn.send({ t: 'next', key });
 
   if (phase === 'lobby') {
     return (
@@ -91,7 +89,7 @@ function TugHost({ game }: { game: Game }) {
         <JoinPanel game={game} />
         {tournament && game.bracket ? (
           <div className="w-full max-w-6xl rounded-3xl bg-ink/5 p-5">
-            <BracketView bracket={game.bracket} currentId={game.current?.matchId} />
+            <BracketView bracket={game.bracket} onPlay={players.length ? play : undefined} />
           </div>
         ) : (
           <div className="w-full max-w-3xl rounded-3xl bg-ink/5 p-5 space-y-2">
@@ -120,10 +118,7 @@ function TugHost({ game }: { game: Game }) {
             ))}
           </div>
         </div>
-        <Button onClick={start} disabled={players.length === 0} className="px-12 py-5 text-2xl">
-          <Play className="w-7 h-7 fill-current" />
-          {tournament ? `Start: ${game.labelA} vs ${game.labelB}` : 'Start matchup 1'}
-        </Button>
+        <NextPicker game={game} onPick={play} disabled={players.length === 0} first />
         {players.length === 0 && (
           <p className="text-ink/50 font-bold -mt-4">Waiting for the first player to join…</p>
         )}
@@ -215,10 +210,7 @@ function TugHost({ game }: { game: Game }) {
           )}
           <div className="flex flex-wrap justify-center gap-3">
             {game.upNext ? (
-              <Button onClick={next} className="px-10 py-4 text-xl">
-                Next: {game.upNext.a} vs {game.upNext.b}
-                <ArrowRight className="w-6 h-6" />
-              </Button>
+              <NextPicker game={game} onPick={play} />
             ) : (
               <Button onClick={restart} className="px-10 py-4 text-xl">
                 <RefreshCw className="w-6 h-6" /> {tournament ? 'New tournament, same entries' : 'Play the series again'}
@@ -235,6 +227,52 @@ function TugHost({ game }: { game: Game }) {
               <BracketView bracket={game.bracket} onPlay={game.champion ? undefined : play} />
             </div>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The big button plays the default next matchup; the chips below it let the
+ * host pick any other matchup that is ready.
+ */
+function NextPicker({
+  game,
+  onPick,
+  disabled,
+  first,
+}: {
+  game: Game;
+  onPick: (key: string) => void;
+  disabled?: boolean;
+  first?: boolean;
+}) {
+  const [main, ...others] = game.choices;
+  if (!main) return null;
+  return (
+    <div className="flex flex-col items-center gap-3 w-full">
+      <Button onClick={() => onPick(main.key)} disabled={disabled} className="px-10 py-5 text-2xl">
+        {first ? <Play className="w-7 h-7 fill-current" /> : null}
+        {first ? 'Start' : 'Next'}: {main.a} vs {main.b}
+        {first ? null : <ArrowRight className="w-6 h-6" />}
+      </Button>
+      {others.length > 0 && (
+        <div className="flex flex-col items-center gap-2 max-w-4xl">
+          <span className="text-xs font-black uppercase tracking-[0.25em] text-ink/50">or pick another</span>
+          <div className="flex flex-wrap justify-center gap-2">
+            {others.map((c) => (
+              <button
+                key={c.key}
+                disabled={disabled}
+                onClick={() => onPick(c.key)}
+                className="px-4 py-2 rounded-full bg-ink/10 hover:bg-ink/20 text-ink font-bold text-sm disabled:opacity-40"
+              >
+                {c.a} <span className="opacity-50">vs</span> {c.b}
+                {game.type === 'tournament' && <span className="ml-2 text-xs opacity-50">{c.label}</span>}
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>

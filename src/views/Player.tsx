@@ -172,14 +172,18 @@ function TugPlayer({ game, me, onLeave }: { game: Game; me: Me; onLeave: () => v
       <Screen>
         <LeaveButton onLeave={onLeave} />
         <p className="text-xs font-black uppercase tracking-[0.3em] text-ink/50">You're in, {me.name}</p>
-        <div className="space-y-2">
-          <p className="text-ink/60 font-bold">{matchNo}</p>
-          <h2 className="text-3xl font-black">
-            <span className={TEAM.A.text}>{game.labelA}</span>
-            <span className="text-ink/40 mx-3 text-xl">vs</span>
-            <span className={TEAM.B.text}>{game.labelB}</span>
-          </h2>
-        </div>
+        {game.choices.length > 1 ? (
+          <h2 className="text-2xl font-black">The host is picking the first matchup…</h2>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-ink/60 font-bold">{matchNo}</p>
+            <h2 className="text-3xl font-black">
+              <span className={TEAM.A.text}>{game.labelA}</span>
+              <span className="text-ink/40 mx-3 text-xl">vs</span>
+              <span className={TEAM.B.text}>{game.labelB}</span>
+            </h2>
+          </div>
+        )}
         <p className="text-ink/60 font-bold max-w-xs">
           When it starts, tap the side you want to win. Tap fast — the rope follows the room.
         </p>
@@ -217,7 +221,9 @@ function TugPlayer({ game, me, onLeave }: { game: Game; me: Me; onLeave: () => v
           <p className="text-2xl font-black text-yellow-300">🏆 {game.champion} is the champion!</p>
         ) : more ? (
           <p className="text-sm font-bold text-ink/60">
-            Next up: {game.upNext!.a} vs {game.upNext!.b}
+            {game.choices.length === 1
+              ? `Next up: ${game.upNext!.a} vs ${game.upNext!.b}`
+              : 'Waiting for the host to pick the next matchup…'}
           </p>
         ) : game.type === 'tournament' ? (
           <p className="text-sm font-bold text-ink/60">Waiting for the host…</p>

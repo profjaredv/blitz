@@ -12,6 +12,12 @@ export type GameStatus = 'waiting' | 'active' | 'finished';
 export type Team = 'A' | 'B';
 export type Theme = 'light' | 'dark';
 
+export interface Choice extends Matchup {
+  /** Series: list index. Tournament: bracket match id. */
+  key: string;
+  label: string;
+}
+
 export interface PublicQuestion {
   text: string;
   options: string[];
@@ -93,7 +99,9 @@ export interface Game {
   stage: string;
   /** The matchup being played (tournament: with its bracket match id). */
   current: (Matchup & { matchId?: string }) | null;
-  /** What the host's Next button plays, if anything. */
+  /** Matchups the host can pick from between rounds; the first is the default. */
+  choices: Choice[];
+  /** What the host's Next button plays by default, if anything. */
   upNext: Matchup | null;
   /** Tournament mode only. */
   bracket: Bracket | null;
